@@ -162,7 +162,7 @@ class _ThreadRow extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          '${last.fromHuman ? 'You' : 'Claude'}: ${plainPreview(last.text)}',
+                          '${last.fromHuman ? 'You' : last.isNotes ? 'Notes' : 'Claude'}: ${plainPreview(last.text)}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall,

@@ -38,8 +38,13 @@ class ThreadMessage {
   /// Status cards and session notices, shown as a single muted line.
   final bool isEvent;
 
+  /// Working notes from this computer's session (a Remote Control report),
+  /// not the reply the thread shows. See `ParsedMessage.kind`.
+  final bool isNotes;
+
   const ThreadMessage({
     this.isEvent = false,
+    this.isNotes = false,
     required this.id,
     required this.author,
     required this.fromHuman,
@@ -54,6 +59,7 @@ class ThreadMessage {
     sentAt: DateTime.parse(j['sent_at'] as String),
     text: (j['text'] as String?) ?? '',
     isEvent: j['kind'] == 'event',
+    isNotes: j['kind'] == 'notes',
   );
 }
 

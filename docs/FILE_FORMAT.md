@@ -47,7 +47,11 @@ Project threads see your messages inside `<wake>` blocks and reply with the
 from a project reply with `mcp__claude-code-remote__send_message` instead;
 only calls with `visibility: "posted_to_shared_channel"` reach the thread, so
 only those count (`"sent_to_shared_agent"` is a note to the project's
-assistant). The parser (`lib/services/transcript_parser.dart`) takes all of
+assistant). Those reports aren't what the thread shows: the project's
+assistant posts its own rewrite, which is never stored locally. So they're
+kept with `kind: "notes"` and shown as "Working notes from this computer"
+(muted, collapsed to 3 lines), while `post_message` replies stay normal
+(`kind` `reply`). The parser (`lib/services/transcript_parser.dart`) takes all of
 these, plus `rename_thread` and `set_thread_resolved`. Plain Code sessions
 contribute your prompts and Claude's text. These formats are undocumented, so
 a Claude update can break parsing. When the parser

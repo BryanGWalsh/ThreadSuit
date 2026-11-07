@@ -141,6 +141,7 @@ class LocalThreadsService implements InjectableWithDisposeInterface {
             fromHuman: m.fromHuman,
             sentAt: m.sentAt,
             text: m.text,
+            isNotes: m.kind == 'notes',
           );
         }
       }

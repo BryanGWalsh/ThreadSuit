@@ -76,6 +76,9 @@ You can also open the folder in Android Studio or IntelliJ and use the
   If the thread's session isn't running, the message waits until it is. It
   arrives marked as coming from Thread Suit, so Claude treats it as a
   request, not as your approval for anything that can't be undone.
+- **Working notes:** in some project threads, Claude's side appears as
+  "Working notes from this computer", collapsed; click "Show more" to read
+  it all (see [What Thread Suit can see](#what-thread-suit-can-see)).
 - **Rename:** click the pencil next to a title to give it your own name. It
   only changes what Thread Suit shows, never the thread in Claude; save an
   empty name to go back.
@@ -123,6 +126,12 @@ project threads, Code sessions and SSH sessions started from the desktop app.
 It can't see cloud-only sessions or sessions started only in a terminal. A
 project thread's real title lives in the cloud, so Thread Suit shows the
 start of your first message instead (rename it if you like).
+
+If Claude's replies in a project thread don't match what the Claude app
+shows, that's because the work ran in a session on this computer, which
+reports to the project's assistant, and the reply the assistant posts is
+stored only on claude.ai. Thread Suit shows the session's report instead:
+the same substance, but longer and more technical.
 
 Curious how it reads all that? [docs/FILE_FORMAT.md](docs/FILE_FORMAT.md) has
 every file and setting.

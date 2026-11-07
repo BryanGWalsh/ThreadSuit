@@ -295,6 +295,9 @@ void main() {
       expect(s.isProjectThread, isTrue);
       expect(s.threadId, 'cmsg_T');
       expect(s.messages.map((m) => (m.fromHuman, m.text)), [(true, 'can you fix it?'), (false, 'Fixed it.')]);
+      // The Remote Control report is this computer's notes, not the thread's reply.
+      expect(s.messages.map((m) => m.kind), ['reply', 'notes']);
+      expect(TranscriptState.fromJson(s.toJson()).messages.last.kind, 'notes');
       expect(s.toolNames, isEmpty); // the reply tool isn't a link source
     });
   });

@@ -63,7 +63,7 @@ class TranscriptState {
 
   /// Bumped whenever parsing changes what it keeps; cache entries from an
   /// older version are re-read from the start.
-  static const version = 9;
+  static const version = 10;
   static const maxLinks = 30;
 
   Map<String, dynamic> toJson() => {
@@ -266,8 +266,17 @@ class TranscriptState {
       isProjectThread = true;
       final text = (input['text'] ?? input['message']) as String?;
       if (text != null) {
+        // A Remote Control session's report reaches the thread only as the
+        // project assistant's rewrite; what's on disk is the session's notes.
         _add(
-          ParsedMessage(id: (b['id'] as String?) ?? '$at', fromHuman: false, author: 'Claude', sentAt: at, text: text),
+          ParsedMessage(
+            id: (b['id'] as String?) ?? '$at',
+            fromHuman: false,
+            author: 'Claude',
+            sentAt: at,
+            text: text,
+            kind: isRemoteReply ? 'notes' : 'reply',
+          ),
         );
       }
     } else if (name.endsWith('hearthbot__rename_thread')) {
@@ -521,12 +530,18 @@ class ParsedMessage {
   final DateTime sentAt;
   final String text;
 
+  /// `reply` (a message in the thread) or `notes` (what this computer's
+  /// session reported, which the thread shows only as the project assistant's
+  /// rewrite).
+  final String kind;
+
   ParsedMessage({
     required this.id,
     required this.fromHuman,
     required this.author,
     required this.sentAt,
     required this.text,
+    this.kind = 'reply',
   });
 
   Map<String, dynamic> toJson() => {
@@ -535,6 +550,7 @@ class ParsedMessage {
     'author': author,
     'sent_at': sentAt.toUtc().toIso8601String(),
     'text': text,
+    if (kind != 'reply') 'kind': kind,
   };
 
   static ParsedMessage fromJson(Map<String, dynamic> j) => ParsedMessage(
@@ -543,5 +559,6 @@ class ParsedMessage {
     author: j['author'] as String,
     sentAt: DateTime.parse(j['sent_at'] as String),
     text: j['text'] as String,
+    kind: (j['kind'] as String?) ?? 'reply',
   );
 }

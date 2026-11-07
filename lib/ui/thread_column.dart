@@ -237,6 +237,7 @@ class _MessageBubble extends StatelessWidget {
         ),
       );
     }
+    if (message.isNotes) return NotesBubble(message: message);
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -253,6 +254,75 @@ class _MessageBubble extends StatelessWidget {
             Text('${mine ? message.author : 'Claude'} · ${ago(message.sentAt)}', style: theme.textTheme.labelSmall),
             const SizedBox(height: 4),
             SelectableText.rich(lightMarkdown(message.text, theme.textTheme.bodyMedium)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What this computer's session reported for a Remote Control project
+/// thread. The thread itself shows the project assistant's rewrite, which
+/// isn't stored locally, so this is labelled as notes, muted, and collapsed
+/// to a few lines until clicked.
+class NotesBubble extends StatefulWidget {
+  final ThreadMessage message;
+  const NotesBubble({super.key, required this.message});
+
+  @override
+  State<NotesBubble> createState() => NotesBubbleState();
+}
+
+class NotesBubbleState extends State<NotesBubble> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.outline;
+    final body = lightMarkdown(widget.message.text, theme.textTheme.bodyMedium?.copyWith(color: muted));
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.all(10),
+        constraints: const BoxConstraints(maxWidth: 560),
+        decoration: BoxDecoration(
+          border: Border.all(color: theme.colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Tooltip(
+              message: 'What Claude on this computer reported. The thread shows the project assistant\'s summary.',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.notes, size: 14, color: muted),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Working notes from this computer · ${ago(widget.message.sentAt)}',
+                    style: theme.textTheme.labelSmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            if (_open)
+              SelectableText.rich(body)
+            else
+              Text.rich(body, key: const ValueKey('notes-collapsed'), maxLines: 3, overflow: TextOverflow.ellipsis),
+            TextButton(
+              key: const ValueKey('notes-toggle'),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 28),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: () => setState(() => _open = !_open),
+              child: Text(_open ? 'Show less' : 'Show more'),
+            ),
           ],
         ),
       ),
