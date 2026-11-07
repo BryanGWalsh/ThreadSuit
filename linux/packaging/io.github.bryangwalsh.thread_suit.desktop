@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Thread Suit
+Comment=Keep track of many Claude threads at once
+Exec=@EXEC@
+Icon=io.github.bryangwalsh.thread_suit
+Terminal=false
+Categories=Development;
+StartupWMClass=io.github.bryangwalsh.thread_suit
