@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:complete_dependency_injector/complete_dependency_injector.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:rxdart/rxdart.dart';
 
 import '../models/models.dart';
@@ -27,7 +28,11 @@ class SendService implements InjectableWithDisposeInterface {
 
   final ClaudePlatform _platform;
 
-  SendService(this._outbox, this._cli, [ClaudePlatform? platform]) : _platform = platform ?? ClaudePlatform.current {
+  final DateTime Function() _now;
+
+  SendService(this._outbox, this._cli, [ClaudePlatform? platform, DateTime Function()? now])
+    : _platform = platform ?? ClaudePlatform.current,
+      _now = now ?? DateTime.now {
     _sub = _outbox.pendingStream.listen((p) {
       _pending = p;
       _deliver();
@@ -51,11 +56,29 @@ class SendService implements InjectableWithDisposeInterface {
     return null;
   }
 
+  /// Each try is a Haiku call, so a message that keeps failing is tried at
+  /// most [maxTries] times, waiting longer each time ([retryDelays]); then it
+  /// stays in the outbox, marked not sent, until the app restarts.
+  static const maxTries = 3;
+  static const retryDelays = [Duration(minutes: 1), Duration(minutes: 5)];
+  final _failures = <String, (int tries, DateTime at)>{};
+
+  /// Runs one delivery pass now, instead of waiting for the timer (for tests).
+  @visibleForTesting
+  Future<void> deliverNow() => _deliver();
+
   Future<void> _deliver() async {
     if (_sending) return;
     _sending = true;
     try {
       for (final m in List.of(_pending)) {
+        final failed = _failures[m.id];
+        if (failed != null) {
+          final (tries, at) = failed;
+          if (tries >= maxTries) continue;
+          if (_now().difference(at) < retryDelays[tries - 1]) continue;
+        }
+        // Checking whether the session runs is local and free; only sending calls Claude.
         final name = await runningSessionName(m.sessionId);
         if (name == null) {
           _set(m.id, "Waiting for the thread's session to start on this computer");
@@ -69,10 +92,13 @@ class SendService implements InjectableWithDisposeInterface {
           error = '$e';
         }
         if (error == null) {
+          _failures.remove(m.id);
           _outbox.remove(m);
           _set(m.id, null);
         } else {
-          _set(m.id, 'Not sent: $error');
+          final tries = (_failures[m.id]?.$1 ?? 0) + 1;
+          _failures[m.id] = (tries, _now());
+          _set(m.id, tries >= maxTries ? 'Not sent after $tries tries: $error' : 'Not sent, will retry: $error');
         }
       }
     } finally {

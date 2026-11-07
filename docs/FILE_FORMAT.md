@@ -140,7 +140,10 @@ moved here. If it can't be moved, it's copied and the old folder is left.
 
 - **Sending:** one `claude -p --model haiku` call per message, using the
   `SendMessage` tool to reach the thread's running session. If the session
-  isn't running, the message waits in `outbox/`.
+  isn't running, the message waits in `outbox/`; checking that is local and
+  makes no Claude call. A send that fails is tried at most 3 times, 1 and then
+  5 minutes apart, then left in `outbox/` marked not sent
+  (`SendService.maxTries`).
 - **Links:** one Haiku call per lookup, as described in [Links](#links).
   Measured on real threads: 17k to 80k input tokens (mostly Claude Code's own
   instructions and tool list, largely cached, plus tool results) and 1 to 3k

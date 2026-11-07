@@ -9,17 +9,18 @@ You started a Claude thread to fix a bug, a second to review a PR, a Claude
 Code session over SSH to poke at a server, and three more you've already
 forgotten. One of them finished an hour ago and is waiting for you. Which one?
 
-![Thread Suit illustration](docs/Threads.jpg)
-
-
 Thread Suit is a small desktop app that keeps all of them in one place. It
 lists every Claude project thread and Claude Code session that ran on your
 computer, shows which ones have news, and lets you open several side by side
 and reply without hunting through windows. It's tailored to people with too
 many threads. (We're sorry about the puns. Not very sorry.)
 
+![Thread Suit illustration](docs/Threads.jpg)
+
 It reads the session files Claude already keeps on your computer, so reading
-costs no tokens and nothing leaves your machine.
+threads costs no tokens and nothing leaves your machine. Sending a reply and
+finding links do use Claude, a little, through your own Claude Code login
+(see [Uses your Claude account](#uses-your-claude-account)).
 
 ## Features
 
@@ -39,7 +40,8 @@ costs no tokens and nothing leaves your machine.
 - macOS, Linux or Windows.
 - The [Claude desktop app](https://claude.ai/download) and
   [Claude Code](https://docs.claude.com/en/docs/claude-code), installed and
-  signed in.
+  signed in. Thread Suit runs the `claude` command for replies and links, so
+  that use counts against the account Claude Code is signed in with.
 - [Flutter](https://docs.flutter.dev/get-started/install), to build the app.
 
 ## Quick start
@@ -109,8 +111,9 @@ tools, read-only. Nothing it says is taken on trust: a link only shows if its
 URL and title really appear in the thread or in what those tools returned.
 So a thread with no git host or issue tracker gets no links at all.
 
-A lookup costs roughly 1 to 3 cents, and Thread Suit keeps them rare and
-remembers the results. To turn them off, put `{"resolve_links": false}` in
+A lookup is a small Haiku call, worth roughly 1 to 3 cents of usage on your
+Claude account, and Thread Suit keeps them rare and remembers the results.
+To turn them off, put `{"resolve_links": false}` in
 `~/.thread-suit/config.json`; threads then show the plain URLs they mention.
 
 ## What Thread Suit can see
@@ -124,17 +127,34 @@ start of your first message instead (rename it if you like).
 Curious how it reads all that? [docs/FILE_FORMAT.md](docs/FILE_FORMAT.md) has
 every file and setting.
 
+## Uses your Claude account
+
+Thread Suit has no AI account of its own. When it needs Claude, it runs your
+`claude` command line (`claude -p` with the small Haiku model), so the call is
+made with, and counted against, the account Claude Code is signed in with:
+your plan's usage limits on a subscription, or your bill on an API key.
+
+That happens for two things only:
+
+- **Sending a reply:** one short Haiku call per message you send (if it
+  fails, Thread Suit tries at most twice more, then stops).
+- **Finding links:** one Haiku call when a thread's links change. It's on by
+  default; turn it off with `{"resolve_links": false}` in
+  `~/.thread-suit/config.json`.
+
+Everything else, including reading every thread, is free and runs no Claude
+calls.
+
 ## Privacy
 
 Thread Suit runs entirely on your computer: no server, no account, no
 analytics. It reads Claude's local files and writes only to its own folder,
 `~/.thread-suit/`. The only things that leave your machine:
 
-- **Sending a message:** one Haiku `claude -p` call, through your own Claude
-  Code login.
-- **Finding links:** one Haiku call per lookup, with a short summary of a
-  thread's URLs and tool calls (never the whole conversation). You can turn
-  it off.
+- **Sending a message:** your message, sent to Claude through your own
+  Claude Code login.
+- **Finding links:** a short summary of a thread's URLs and tool calls (never
+  the whole conversation), sent the same way. You can turn it off.
 - **Opening a link:** your browser opens it, as usual.
 
 ## Disclaimer
