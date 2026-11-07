@@ -181,46 +181,34 @@ class LinkDetector {
     return u.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '');
   }
 
-  /// Keeps only what Haiku could not have made up. [evidence] is everything
+  /// Keeps only links Haiku could not have made up. [evidence] is everything
   /// it was shown or found: the thread's digest and the text of its own tool
   /// results. A link survives only if it's `https` and its exact URL appears
   /// in [evidence] (compared without scheme, `www.`, trailing slash, query or
-  /// fragment). Its title, state, provider name and key are kept only if they
-  /// appear in [evidence] too; otherwise the link is labelled by its host
-  /// and path. Duplicates are dropped.
+  /// fragment). Its name, key, title and state are kept as Haiku gave them;
+  /// without a name or key it's labelled by host and path. Duplicates are
+  /// dropped.
   static List<ResolvedLink> validate(Iterable<ResolvedLink> links, String evidence) {
     final urls = {for (final u in findUrls(evidence)) normalize(u)};
-    final text = _squash(evidence);
-    bool seen(String? s) => s != null && s.trim().isNotEmpty && text.contains(_squash(s));
     final out = <ResolvedLink>[];
     for (final l in links) {
       if (Uri.tryParse(l.url)?.scheme != 'https' || !urls.contains(normalize(l.url))) continue;
+      // The URL is the check; its name, title and state are taken as Haiku
+      // gave them (it's told to leave out what it doesn't know).
       final plain = ResolvedLink.plain(l.url);
-      // A key counts if the evidence shows it, or the URL itself carries its
-      // id ("#7" for ".../pull/7", "OPS-7" for ".../browse/OPS-7").
-      final keyOk = seen(l.key) || _inUrl(l.key, l.url);
       final checked = ResolvedLink(
         kind: l.kind,
-        providerName: keyOk && seen(l.providerName) ? l.providerName : plain.providerName,
-        key: keyOk ? l.key : plain.key,
+        providerName: l.providerName.isEmpty ? plain.providerName : l.providerName,
+        key: l.key.isEmpty ? plain.key : l.key,
         url: l.url,
-        title: seen(l.title) ? l.title : null,
-        state: seen(l.state) ? l.state : null,
+        title: l.title,
+        state: l.state,
         prWord: l.prWord,
       );
       if (!out.contains(checked)) out.add(checked);
     }
     return out;
   }
-
-  static bool _inUrl(String key, String url) {
-    final id = key.replaceFirst(RegExp(r'^[#!]'), '').toLowerCase();
-    if (id.isEmpty) return false;
-    final segments = (Uri.tryParse(url)?.pathSegments ?? const []).map((s) => s.toLowerCase());
-    return segments.contains(id);
-  }
-
-  static String _squash(String s) => s.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
   /// A stable 64-bit FNV-1a hash, as hex (Dart's own hashCode isn't stable
   /// across runs).

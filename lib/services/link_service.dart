@@ -116,7 +116,7 @@ class LinkService implements InjectableWithDisposeInterface {
   }
 
   /// Bumped when lookups change; older cached results are dropped.
-  static const cacheVersion = 4;
+  static const cacheVersion = 5;
 
   final DataDir _dir;
   final ClaudeCli _cli;

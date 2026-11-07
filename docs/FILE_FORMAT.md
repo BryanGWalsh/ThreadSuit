@@ -91,17 +91,16 @@ seen in this computer's sessions whose names start with a read verb (`get`,
 `lookup`, `describe`, `retrieve`), plus the `read_commands`. It has no file
 tools. It runs with `--output-format stream-json --verbose`, so Thread Suit
 sees the text of every tool result in the run. The answer is a JSON array of
-`{kind, provider_name, key, title, state, url, label}`, and nothing in it is trusted
-(`LinkDetector.validate`): a link is kept only if it's `https` and its exact
-URL (ignoring scheme, `www.`, trailing slash, query and fragment) appears in
-the digest or in those tool results. Its title, state and provider name are
-kept only if they appear there too, and its key only if it does or the URL
-contains it; otherwise the link is labelled by host and path. The link text
-is built from those checked parts, never taken from `label` as is: provider,
-then `PR` (or `MR`) for pull requests, then the key (`#` added to a bare
-number), then `: title`, e.g. "GitHub PR #20: Fix login" or "YouTrack OPS-4:
-Build the data model". `label` only supplies the provider's casing (when it
-matches `provider_name`) and the PR/MR word.
+`{kind, provider_name, key, title, state, url, label}`. Its URLs aren't
+trusted (`LinkDetector.validate`): a link is kept only if it's `https` and its
+exact URL (ignoring scheme, `www.`, trailing slash, query and fragment)
+appears in the digest or in those tool results. Its provider name, key, title
+and state are taken as given; the prompt tells Haiku not to guess and to
+leave them null, or return `[]`, when it doesn't know. The link text is built
+from those parts: provider, then `PR` (or `MR`) for pull requests, then the
+key (`#` added to a bare number), then `: title`, e.g. "GitHub PR #20: Fix
+login" or "YouTrack OPS-4: Build the data model". `label` supplies the
+provider's casing (when it matches `provider_name`) and the PR/MR word.
 
 When it runs: the digest's hash covers URLs, references and MCP calls (not
 ordinary shell commands). A changed hash waits 30 seconds to settle, then

@@ -64,19 +64,26 @@ void main() {
       ]);
     });
 
-    test('titles, states, keys and provider names nobody saw are dropped', () {
-      const evidence = 'Tool result: {"title": "Fix login", "state": "In Review", "url": "https://t.example/i/OPS-7"}';
-      final l = LinkDetector.validate([
+    test("names, keys, titles and states are taken as Haiku gives them; the URL is still checked", () {
+      const evidence = 'Tool result: https://t.example/i/OPS-7';
+      final out = LinkDetector.validate([
         const ResolvedLink(
           kind: LinkKind.issue,
-          providerName: 'Jira', // not in the evidence
+          providerName: 'Jira',
           key: 'OPS-7',
           url: 'https://t.example/i/OPS-7',
           title: 'Fix login',
-          state: 'Closed', // not in the evidence
+          state: 'Closed',
         ),
+        const ResolvedLink(kind: LinkKind.issue, providerName: 'Jira', key: 'OPS-8', url: 'https://t.example/i/OPS-8'),
+        const ResolvedLink(kind: LinkKind.issue, providerName: '', key: '', url: 'https://t.example/i/OPS-7?x=1'),
+      ], evidence);
+      expect(out.map((l) => (l.providerName, l.key, l.title, l.state)), [('Jira', 'OPS-7', 'Fix login', 'Closed')]);
+      // Without a name or key, a link is labelled by host and path.
+      final bare = LinkDetector.validate([
+        const ResolvedLink(kind: LinkKind.other, providerName: '', key: '', url: 'https://t.example/i/OPS-7'),
       ], evidence).single;
-      expect((l.providerName, l.key, l.title, l.state), ('t.example', 'OPS-7', 'Fix login', null));
+      expect(bare.label, 't.example/i/OPS-7');
     });
 
     test('hash is stable and changes with the text', () {
@@ -121,19 +128,25 @@ void main() {
       expect((odd.providerName, odd.prWord, odd.label), ('GitHub', null, 'GitHub PR #3'));
     });
 
-    test('an ungrounded title is dropped from the link text', () {
+    test('a link whose URL nobody saw is dropped, whatever its title', () {
       const evidence = 'https://git.example/acme/web/pull/20 merged';
-      final l = LinkDetector.validate([
+      final out = LinkDetector.validate([
         ResolvedLink.fromJson({
           'kind': 'pull_request',
-          'provider_name': 'git.example',
+          'provider_name': 'Git',
           'key': '#20',
           'url': 'https://git.example/acme/web/pull/20',
-          'title': 'A title nobody saw',
-          'label': 'git.example PR #20: A title nobody saw',
+          'title': 'Cache build artifacts',
         })!,
-      ], evidence).single;
-      expect(l.text, 'git.example PR #20');
+        ResolvedLink.fromJson({
+          'kind': 'pull_request',
+          'provider_name': 'Git',
+          'key': '#21',
+          'url': 'https://git.example/acme/web/pull/21',
+          'title': 'A PR nobody mentioned',
+        })!,
+      ], evidence);
+      expect(out.map((l) => l.text), ['Git PR #20: Cache build artifacts']);
     });
 
     test('labels', () {

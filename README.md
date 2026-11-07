@@ -107,12 +107,12 @@ show up under its title, like "GitHub PR #12: Fix login".
 
 When a thread's links change, Thread Suit asks Haiku once, with a short
 summary of what the thread touched. Haiku looks the items up with your own
-tools, read-only. Nothing it says is taken on trust: a link only shows if its
-URL and title really appear in the thread or in what those tools returned.
-So a thread with no git host or issue tracker gets no links at all.
+tools, read-only, and leaves out anything it can't find. A link only shows
+if its URL really appears in the thread or in what those tools returned, so
+a thread with no git host or issue tracker gets no links at all.
 
-A lookup is a small Haiku call, worth roughly 1 to 3 cents of usage on your
-Claude account, and Thread Suit keeps them rare and remembers the results.
+A lookup is a small Haiku call, and Thread Suit keeps them rare and
+remembers the results.
 To turn them off, put `{"resolve_links": false}` in
 `~/.thread-suit/config.json`; threads then show the plain URLs they mention.
 

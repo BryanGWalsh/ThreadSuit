@@ -31,7 +31,9 @@
   special cases). `TranscriptState` collects URLs, tool calls and references;
   `LinkService` sends a thread's digest to one Haiku call
   (`ClaudeCli.resolveLinks`) with read-only tools only, and keeps only https
-  links on hosts already in the thread. To improve links, change the digest,
+  links whose exact URL appears in the thread or Haiku's tool results (titles
+  and states are taken as Haiku gives them). Threads without evidence are
+  never looked up. To improve links, change the digest,
   the prompt or the validation, and `test/link_detector_test.dart`. Keep
   lookups rare (debounce, per-thread interval, cache); a lookup costs a few
   cents. `tool_test/resolve_check_test.dart` runs one real lookup.
