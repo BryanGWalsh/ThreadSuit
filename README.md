@@ -15,12 +15,12 @@ computer, shows which ones have news, and lets you open several side by side
 and reply without hunting through windows. It's tailored to people with too
 many threads. (We're sorry about the puns. Not very sorry.)
 
-![Thread Suit illustration](docs/Threads.jpg)
-
 It reads the session files Claude already keeps on your computer, so reading
 threads costs no tokens and nothing leaves your machine. Sending a reply and
 finding links do use Claude, a little, through your own Claude Code login
 (see [Uses your Claude account](#uses-your-claude-account)).
+
+![Thread Suit illustration](docs/Threads.jpg)
 
 ## Features
 
