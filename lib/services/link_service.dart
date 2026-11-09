@@ -20,7 +20,41 @@ class LinkDigest {
   final List<String> toolCalls;
   final List<String> refs;
 
-  LinkDigest({this.urls = const [], this.shellUrls = const [], this.toolCalls = const [], this.refs = const []});
+  /// What the thread is about: its title and the request that started it.
+  final List<String> focus;
+
+  LinkDigest({
+    this.urls = const [],
+    this.shellUrls = const [],
+    this.toolCalls = const [],
+    this.refs = const [],
+    this.focus = const [],
+  });
+
+  /// How strongly the thread is about [url]: 2 when its title or opening
+  /// request names it, 2 more when a tool call acted on it, 0 when it's only
+  /// mentioned in passing (an example, another thread's work). Matches the
+  /// URL itself or, for PR and issue URLs, their key ("#1605", "MOB-47").
+  int relevance(String url) {
+    final tokens = _tokens(url);
+    bool any(String text) => tokens.any((t) => t.hasMatch(text));
+    final focusText = focus.join('\n');
+    final callText = toolCalls.join('\n');
+    return (any(focusText) ? 2 : 0) + (any(callText) ? 2 : 0);
+  }
+
+  static List<RegExp> _tokens(String url) {
+    final out = [RegExp(RegExp.escape(url.replaceAll(RegExp(r'/+$'), '')))];
+    final path = Uri.tryParse(url)?.path ?? '';
+    if (RegExp(r'/(?:pull|pulls|merge_requests|issues)/(\d+)').firstMatch(path) case final m?) {
+      // "#1605", "PR 1605", "pull/1605", and a bare 1605 as a command argument.
+      out.add(RegExp('(?:#|!|\\bPR\\s*#?|\\bMR\\s*!?|pull/|issues/|(?<=\\s))${m[1]}\\b', caseSensitive: false));
+    }
+    if (RegExp(r'/(?:issue|issues|browse)/([A-Z][A-Z0-9]*-\d+)').firstMatch(path) case final m?) {
+      out.add(RegExp('\\b${m[1]}\\b'));
+    }
+    return out;
+  }
 
   bool get isEmpty => urls.isEmpty && shellUrls.isEmpty && toolCalls.isEmpty && refs.isEmpty;
 
@@ -45,6 +79,7 @@ class LinkDigest {
         items.isEmpty ? '' : '$title:\n${items.map((i) => '- $i').join('\n')}\n';
     var u = urls, s = shellUrls, c = toolCalls, r = refs;
     String build() => [
+      section('What the thread is about (title and opening request)', focus.map(_short).toList()),
       section('URLs in messages and connector tools', u),
       section('URLs in command output', s),
       section('Tool calls', c),
@@ -69,6 +104,11 @@ class LinkDigest {
     [...urls, '|', ...shellUrls, '|', ...refs, '|', ...toolCalls.where((c) => c.startsWith('mcp__'))].join('\n'),
   );
 
+  static String _short(String s) {
+    final one = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return one.length > 600 ? '${one.substring(0, 600)}…' : one;
+  }
+
   static final _localHost = RegExp(
     r'^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)$|\.local$|\.localhost$',
   );
@@ -76,15 +116,28 @@ class LinkDigest {
 
   /// URLs worth showing as plain links when there's no lookup result: not
   /// this computer or the local network, not images or web assets, and not
-  /// a bare host.
-  List<String> get plainUrls => [
-    for (final u in urls.reversed)
-      if (Uri.tryParse(u) case final uri?
-          when !_localHost.hasMatch(uri.host) &&
-              !_assetPath.hasMatch(uri.path) &&
-              uri.path.replaceAll('/', '').isNotEmpty)
-        u,
-  ];
+  /// a bare host. When some are clearly what the thread is about
+  /// ([relevance]), passing mentions are left out. Most relevant first, then
+  /// newest.
+  List<String> get plainUrls {
+    final candidates = [
+      for (final u in urls.reversed)
+        if (Uri.tryParse(u) case final uri?
+            when !_localHost.hasMatch(uri.host) &&
+                !_assetPath.hasMatch(uri.path) &&
+                uri.path.replaceAll('/', '').isNotEmpty)
+          u,
+    ];
+    final scores = {for (final u in candidates) u: relevance(u)};
+    final keep = scores.values.any((v) => v > 0) ? candidates.where((u) => scores[u]! > 0).toList() : candidates;
+    // Stable sort: equal scores keep newest-first order.
+    final indexed = keep.indexed.toList()
+      ..sort((a, b) {
+        final byScore = scores[b.$2]!.compareTo(scores[a.$2]!);
+        return byScore != 0 ? byScore : a.$1.compareTo(b.$1);
+      });
+    return [for (final (_, u) in indexed) u];
+  }
 }
 
 /// Finds the PRs and issues each thread is about, with no provider-specific
@@ -116,7 +169,7 @@ class LinkService implements InjectableWithDisposeInterface {
   }
 
   /// Bumped when lookups change; older cached results are dropped.
-  static const cacheVersion = 5;
+  static const cacheVersion = 6;
 
   final DataDir _dir;
   final ClaudeCli _cli;

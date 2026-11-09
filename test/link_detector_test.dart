@@ -381,7 +381,8 @@ void main() {
 
     test('plain URLs first; one debounced, rate-limited, cached lookup; made-up hosts dropped', () async {
       final svc = make()..knownTools = {'mcp__tracker__get_issue', 'mcp__tracker__delete_issue'};
-      expect(svc.linksFor('t1', digest).map((l) => l.label), ['docs.example/guide', 'tracker.example OPS-7']);
+      // The docs page is only mentioned; the tracker issue was acted on, so only it shows.
+      expect(svc.linksFor('t1', digest).map((l) => l.label), ['tracker.example OPS-7']);
 
       await svc.resolveNow(); // still settling
       expect(cli.calls, 0);
@@ -436,6 +437,31 @@ void main() {
       await svc.dispose();
     });
 
+    test('plain links: what the thread is about first; passing mentions dropped', () {
+      final d = LinkDigest(
+        urls: [
+          'https://git.example/acme/app/pull/1605',
+          'https://shop.example/products/x', // an example URL in a reply
+          'https://tracker.example/issue/MOB-47/shipped-alerts', // another thread's issue
+          'https://tracker.example/issue/MOB-59/www-links',
+        ],
+        toolCalls: [r'$ gh pr view 1605 --repo acme/app'],
+        focus: ['Research www link handling (MOB-59)'],
+      );
+      expect(d.relevance('https://git.example/acme/app/pull/1605'), 2); // acted on
+      expect(d.relevance('https://tracker.example/issue/MOB-59/www-links'), 2); // in the title
+      expect(d.relevance('https://shop.example/products/x'), 0);
+      expect(d.plainUrls, [
+        'https://tracker.example/issue/MOB-59/www-links',
+        'https://git.example/acme/app/pull/1605',
+      ]);
+      // With nothing clearly relevant, every URL is still shown, newest first.
+      final loose = LinkDigest(urls: ['https://a.example/x', 'https://b.example/y']);
+      expect(loose.plainUrls, ['https://b.example/y', 'https://a.example/x']);
+      // The summary Haiku reads leads with what the thread is about.
+      expect(d.text, startsWith('What the thread is about'));
+    });
+
     test('a failed lookup is cached and falls back to plain URLs', () async {
       cli.fail = true;
       final svc = make();
@@ -446,8 +472,8 @@ void main() {
       svc.linksFor('t1', digest);
       await svc.resolveNow();
       expect(cli.calls, 1);
-      // The plain fallback still reads an issue-shaped path as an issue.
-      expect(svc.linksFor('t1', digest).map((l) => l.kind), [LinkKind.other, LinkKind.issue]);
+      // The plain fallback keeps the acted-on issue and reads it as an issue.
+      expect(svc.linksFor('t1', digest).map((l) => l.kind), [LinkKind.issue]);
       await svc.dispose();
     });
 
@@ -457,7 +483,7 @@ void main() {
       clock = clock.add(const Duration(minutes: 5));
       await svc.resolveNow();
       expect(cli.calls, 0);
-      expect(svc.linksFor('t1', digest), hasLength(2));
+      expect(svc.linksFor('t1', digest), hasLength(1)); // the acted-on issue; the passing docs link is left out
       File(dir.config).writeAsStringSync('{"resolve_links": false}');
       expect(LinkService.readEnabled(dir), isFalse);
       File(dir.config).writeAsStringSync('{}');

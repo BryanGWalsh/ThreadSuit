@@ -185,6 +185,7 @@ class LocalThreadsService implements InjectableWithDisposeInterface {
         shellUrls: unique(shellUrls),
         toolCalls: unique(calls),
         refs: unique(refs),
+        focus: [?title, if (firstPrompt != null && firstPrompt != title) firstPrompt],
       );
       threads.add(
         ThreadSummary(
