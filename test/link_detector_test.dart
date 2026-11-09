@@ -151,6 +151,17 @@ void main() {
 
     test('labels', () {
       expect(ResolvedLink.plain('https://www.docs.example/guide/start').label, 'docs.example/guide/start');
+      // Not looked up yet: a pull request or issue path still reads as one.
+      String plain(String url) => ResolvedLink.plain(url).text;
+      expect(plain('https://github.com/acme/app/pull/1605'), 'github.com PR #1605');
+      expect(plain('https://gitlab.example/g/p/-/merge_requests/3'), 'gitlab.example MR !3');
+      expect(plain('https://git.example/a/b/issues/41'), 'git.example #41');
+      expect(
+        plain('https://linear.app/acme/issue/MOB-47/shipped-alerts-survive-a-failed-queue-write'),
+        'linear.app MOB-47: Shipped alerts survive a failed queue write',
+      );
+      expect(plain('https://tracker.example/browse/OPS-7'), 'tracker.example OPS-7');
+      expect(ResolvedLink.plain('https://github.com/acme/app/pull/1605').kind, LinkKind.pullRequest);
       final l = ResolvedLink.fromJson({
         'kind': 'pull_request',
         'provider_name': 'GitHub',
@@ -370,7 +381,7 @@ void main() {
 
     test('plain URLs first; one debounced, rate-limited, cached lookup; made-up hosts dropped', () async {
       final svc = make()..knownTools = {'mcp__tracker__get_issue', 'mcp__tracker__delete_issue'};
-      expect(svc.linksFor('t1', digest).map((l) => l.label), ['docs.example/guide', 'tracker.example/browse/OPS-7']);
+      expect(svc.linksFor('t1', digest).map((l) => l.label), ['docs.example/guide', 'tracker.example OPS-7']);
 
       await svc.resolveNow(); // still settling
       expect(cli.calls, 0);
@@ -405,6 +416,26 @@ void main() {
       await again.dispose();
     });
 
+    test('threads open as tiles are looked up first, with a shorter wait', () async {
+      final svc = make();
+      final other = LinkDigest(urls: ['https://docs.example/other'], toolCalls: const [], refs: const []);
+      svc.linksFor('waiting', digest);
+      clock = clock.add(const Duration(seconds: 5));
+      svc.linksFor('open', LinkDigest(urls: digest.urls, toolCalls: digest.toolCalls, refs: const ['OPS-8']));
+      svc.priority = {'open'};
+      clock = clock.add(const Duration(seconds: 31));
+      await svc.resolveNow();
+      expect(cli.calls, 1);
+      expect(cli.lastDigest, contains('OPS-8')); // the open thread, though it queued later
+      // The next open thread needs only the short wait, not the minute.
+      svc.linksFor('open2', other);
+      svc.priority = {'open', 'open2'};
+      clock = clock.add(const Duration(seconds: 31));
+      await svc.resolveNow();
+      expect(cli.calls, 2);
+      await svc.dispose();
+    });
+
     test('a failed lookup is cached and falls back to plain URLs', () async {
       cli.fail = true;
       final svc = make();
@@ -415,7 +446,8 @@ void main() {
       svc.linksFor('t1', digest);
       await svc.resolveNow();
       expect(cli.calls, 1);
-      expect(svc.linksFor('t1', digest).map((l) => l.kind), [LinkKind.other, LinkKind.other]);
+      // The plain fallback still reads an issue-shaped path as an issue.
+      expect(svc.linksFor('t1', digest).map((l) => l.kind), [LinkKind.other, LinkKind.issue]);
       await svc.dispose();
     });
 

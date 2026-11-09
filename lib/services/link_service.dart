@@ -126,6 +126,12 @@ class LinkService implements InjectableWithDisposeInterface {
 
   /// The least time between two lookups of the same thread.
   final Duration perThreadInterval;
+
+  /// The least time between lookups while a thread in [priority] is waiting.
+  final Duration priorityInterval;
+
+  /// Threads open as tiles: their lookups go first and wait less.
+  Set<String> priority = {};
   final DateTime Function() _now;
 
   final _changes = PublishSubject<void>();
@@ -149,6 +155,7 @@ class LinkService implements InjectableWithDisposeInterface {
     this.debounce = const Duration(seconds: 30),
     this.minInterval = const Duration(minutes: 1),
     this.perThreadInterval = const Duration(minutes: 10),
+    this.priorityInterval = const Duration(seconds: 10),
     DateTime Function()? now,
   }) : enabled = enabled ?? readEnabled(_dir),
        _now = now ?? DateTime.now {
@@ -185,14 +192,19 @@ class LinkService implements InjectableWithDisposeInterface {
   Future<void> _resolve() async {
     if (_working || _pending.isEmpty) return;
     final now = _now();
-    if (_lastCall != null && now.difference(_lastCall!) < minInterval) return;
-    // The thread whose digest has been still the longest, once it's settled.
+    // Open threads first; then the thread whose digest has been still the
+    // longest, once it's settled.
     final ready = _pending.entries.where((e) {
       if (now.difference(e.value.$3) < debounce) return false;
       final at = DateTime.tryParse(((_cache[e.key] as Map?)?['at'] as String?) ?? '');
       return at == null || now.difference(at) >= perThreadInterval;
-    }).toList()..sort((a, b) => a.value.$3.compareTo(b.value.$3));
+    }).toList()..sort((a, b) {
+      final pa = priority.contains(a.key), pb = priority.contains(b.key);
+      return pa != pb ? (pa ? -1 : 1) : a.value.$3.compareTo(b.value.$3);
+    });
     if (ready.isEmpty) return;
+    final gap = priority.contains(ready.first.key) ? priorityInterval : minInterval;
+    if (_lastCall != null && now.difference(_lastCall!) < gap) return;
     final MapEntry(key: threadId, value: (digest, hash, _)) = ready.first;
     _working = true;
     _lastCall = now;

@@ -41,8 +41,13 @@ Injector buildRootInjector(DataDir dir, [ClaudePlatform? platform]) {
   injector.registerFactories([
     InjectableFactory.withoutDependencies<ClaudeCli>(() => ClaudeCli(os)),
     InjectableFactory.withDependencies<LinkService>(
-      DependencyDataBuilder.list([DataDir, ClaudeCli]),
-      (d) => LinkService(d.get<DataDir>(), d.get<ClaudeCli>()),
+      DependencyDataBuilder.list([DataDir, ClaudeCli, WorkspaceService]),
+      (d) {
+        final links = LinkService(d.get<DataDir>(), d.get<ClaudeCli>());
+        // Look up the links of threads you have open before the rest.
+        d.get<WorkspaceService>().openStream.listen((ids) => links.priority = ids.toSet());
+        return links;
+      },
     ),
     InjectableFactory.withDependencies<LocalThreadsService>(
       DependencyDataBuilder.list([DataDir, LinkService]),

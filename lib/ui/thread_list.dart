@@ -168,11 +168,11 @@ class _ThreadRow extends StatelessWidget {
                           style: theme.textTheme.bodySmall,
                         ),
                       ),
-                    if (thread.links.isNotEmpty)
+                    if (thread.links.any((l) => l.kind != LinkKind.other))
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          thread.links.map((l) => l.key).join(' · '),
+                          thread.links.where((l) => l.kind != LinkKind.other).map((l) => l.shortKey).join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),

@@ -44,16 +44,49 @@ class ResolvedLink {
     this.prWord,
   });
 
-  /// A URL with nothing known about it: labelled by host and path.
+  /// A URL not looked up yet. When its path has the shape of a pull request
+  /// (`/pull/12`, `/merge_requests/3`) or an issue (`/issues/5`,
+  /// `/issue/OPS-7/some-title`, `/browse/OPS-7`), it gets that kind, key and,
+  /// from a slug, a title, labelled by host ("github.com PR #12"). The shape
+  /// is all that's read; no provider is assumed. Otherwise: host and path.
   factory ResolvedLink.plain(String url) {
     final u = Uri.tryParse(url);
     final path = (u?.path ?? '').replaceAll(RegExp(r'/+$'), '');
+    final host = LinkDetector.hostOf(url) ?? url;
+    if (_prPath.firstMatch(path) case final m?) {
+      final mr = m[1] == 'merge_requests';
+      return ResolvedLink(
+        kind: LinkKind.pullRequest,
+        providerName: host,
+        key: mr ? '!${m[2]}' : m[2]!,
+        url: url,
+        prWord: mr ? 'MR' : 'PR',
+      );
+    }
+    if (_issueKeyPath.firstMatch(path) case final m?) {
+      return ResolvedLink(kind: LinkKind.issue, providerName: host, key: m[1]!, url: url, title: _slugTitle(m[2]));
+    }
+    if (_issueNumberPath.firstMatch(path) case final m?) {
+      return ResolvedLink(kind: LinkKind.issue, providerName: host, key: m[1]!, url: url);
+    }
     return ResolvedLink(
       kind: LinkKind.other,
-      providerName: LinkDetector.hostOf(url) ?? url,
+      providerName: host,
       key: path.length > 40 ? '…${path.substring(path.length - 39)}' : path,
       url: url,
     );
+  }
+
+  static final _prPath = RegExp(r'/(pull|pulls|merge_requests)/(\d+)(?:/|$)');
+  static final _issueKeyPath = RegExp(r'/(?:issue|issues|browse)/([A-Z][A-Z0-9]*-\d+)(?:/([^/]+))?(?:/|$)');
+  static final _issueNumberPath = RegExp(r'/issues/(\d+)(?:/|$)');
+
+  /// "shipped-alerts-survive-a-failed-write" -> "Shipped alerts survive a failed write".
+  static String? _slugTitle(String? slug) {
+    if (slug == null) return null;
+    final words = Uri.decodeComponent(slug).replaceAll(RegExp(r'[-_]+'), ' ').trim();
+    if (words.isEmpty || !words.contains(' ')) return null;
+    return words[0].toUpperCase() + words.substring(1);
   }
 
   /// "GitHub #12", "Jira OPS-7"; for a plain URL, "example.com/a/b".
@@ -65,6 +98,9 @@ class ResolvedLink {
     final id = RegExp(r'^\d+$').hasMatch(key) ? '#$key' : key;
     return kind == LinkKind.pullRequest ? '$providerName ${prWord ?? 'PR'} $id' : '$providerName $id';
   }
+
+  /// The id alone, for compact lists: "#20", "!3", "OPS-7".
+  String get shortKey => RegExp(r'^\d+$').hasMatch(key) ? '#$key' : key;
 
   /// The full link text: "GitHub PR #20: Fix login".
   String get text => title == null ? label : '$label: $title';
