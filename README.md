@@ -123,8 +123,13 @@ To turn them off, put `{"resolve_links": false}` in
 
 Everything the Claude desktop app and Claude Code keep on your computer:
 project threads, Code sessions and SSH sessions started from the desktop app.
-It can't see cloud-only sessions or sessions started only in a terminal. A
-project thread's real title lives in the cloud, so Thread Suit shows the
+
+**Threads that only ran in the cloud don't appear.** If a thread never ran
+on this computer, for example a session in Claude Code on the web, its
+conversation is stored on claude.ai and nothing is saved locally, so Thread
+Suit can't see it. Sessions started only in a terminal don't appear either.
+
+A project thread's real title lives in the cloud, so Thread Suit shows the
 start of your first message instead (rename it if you like).
 
 If Claude's replies in a project thread don't match what the Claude app
