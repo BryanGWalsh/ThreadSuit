@@ -63,7 +63,7 @@ class TranscriptState {
 
   /// Bumped whenever parsing changes what it keeps; cache entries from an
   /// older version are re-read from the start.
-  static const version = 10;
+  static const version = 11;
   static const maxLinks = 30;
 
   Map<String, dynamic> toJson() => {
@@ -163,6 +163,30 @@ class TranscriptState {
       return;
     }
     final type = e['type'];
+    // Messages you send while the session is busy are stored as a queued
+    // prompt first ("queue-operation" enqueue) and, when delivered mid-turn,
+    // as a "queued_command" attachment instead of a user entry. Both carry
+    // the same <wake> text; message ids keep each message once.
+    if (type == 'queue-operation' && e['operation'] == 'enqueue' && e['content'] is String) {
+      final text = e['content'] as String;
+      if (text.contains('<wake')) {
+        isProjectThread = true;
+        _wake(text);
+      }
+      return;
+    }
+    if (type == 'attachment') {
+      final a = e['attachment'];
+      if (a is Map && a['type'] == 'queued_command') {
+        for (final text in _texts(a['prompt'] ?? a['content'])) {
+          if (text.contains('<wake')) {
+            isProjectThread = true;
+            _wake(text);
+          }
+        }
+      }
+      return;
+    }
     if (type != 'user' && type != 'assistant') return;
     if (e['isMeta'] == true || e['isSidechain'] == true) return;
     final at = DateTime.tryParse((e['timestamp'] as String?) ?? '');
@@ -239,6 +263,8 @@ class TranscriptState {
       // The first message of a thread is its root, whose id is the thread id.
       threadId ??= id;
       if (messages.any((x) => x.id == id)) continue;
+      // Already scrolled out of the kept window (seen before as a queued copy).
+      if (messages.length >= keep && sent.isBefore(messages.first.sentAt)) continue;
       _add(
         ParsedMessage(
           id: id,
@@ -248,6 +274,18 @@ class TranscriptState {
           text: _unescape(m.group(2)!.trim()),
         ),
       );
+    }
+  }
+
+  /// Every string in a JSON value: a plain string, or the text parts of a
+  /// content list.
+  static Iterable<String> _texts(Object? v) sync* {
+    if (v is String) {
+      yield v;
+    } else if (v is List) {
+      for (final x in v) {
+        yield* _texts(x is Map ? x['text'] : x);
+      }
     }
   }
 
