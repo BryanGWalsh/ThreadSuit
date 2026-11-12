@@ -97,13 +97,23 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
   /// Asleep threads don't count: they're out of the way until a message wakes them.
   int get unreadCount => threads.where((t) => !isAsleep(t) && isUnread(t)).length;
 
-  void toggleSleep(ThreadSummary t) => isAsleep(t) ? sleepService.wake(t) : sleepService.sleep(t);
+  void toggleSleep(ThreadSummary t) => isAsleep(t) ? sleepService.wake(t) : sleep(t);
+
+  /// Puts [t] to sleep and closes its tile: it's out of the way until a new
+  /// message wakes it.
+  void sleep(ThreadSummary t) {
+    sleepService.sleep(t);
+    workspace.close(t.threadId);
+  }
 
   List<OutboxMessage> pendingFor(String threadId) => pending.where((m) => m.threadId == threadId).toList();
 
+  /// Opens [t] as a tile. Opening an asleep thread wakes it, so every open
+  /// tile is awake.
   void open(ThreadSummary t) {
     workspace.open(t.threadId);
     seenService.markSeen(t);
+    sleepService.wake(t);
   }
 
   /// Shows [t] as [title] in Thread Suit only; an empty title restores its own.

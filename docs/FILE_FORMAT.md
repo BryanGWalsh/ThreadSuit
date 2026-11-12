@@ -98,7 +98,9 @@ sees the text of every tool result in the run. The answer is a JSON array of
 `{kind, provider_name, key, title, state, url, label}`. Its URLs aren't
 trusted (`LinkDetector.validate`): a link is kept only if it's `https` and its
 exact URL (ignoring scheme, `www.`, trailing slash, query and fragment)
-appears in the digest or in those tool results. Its provider name, key, title
+appears in the thread's digest. A URL Haiku only found in its own tool
+results (a PR it searched for, say) is dropped: the list shows links the
+thread itself contains. Its provider name, key, title
 and state are taken as given; the prompt tells Haiku not to guess and to
 leave them null, or return `[]`, when it doesn't know. The link text is built
 from those parts: provider, then `PR` (or `MR`) for pull requests, then the

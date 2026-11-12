@@ -143,8 +143,9 @@ class LinkDigest {
 /// Finds the PRs and issues each thread is about, with no provider-specific
 /// code. Haiku reads the thread's [LinkDigest] and may use the user's own
 /// read-only MCP, plugin and CLI tools to fill in titles and states
-/// ([ClaudeCli.resolveLinks]). Every link it returns must be `https` on a host
-/// the thread already mentions, so it can't make one up.
+/// ([ClaudeCli.resolveLinks]). Every link it returns must be `https` and its
+/// exact URL must appear in the thread, so it can't make one up or add one it
+/// found on its own.
 ///
 /// Token use stays small: a thread is looked up only when its digest changed
 /// ([LinkDigest.hash]) and then stayed the same for [debounce], one thread at
@@ -169,7 +170,7 @@ class LinkService implements InjectableWithDisposeInterface {
   }
 
   /// Bumped when lookups change; older cached results are dropped.
-  static const cacheVersion = 6;
+  static const cacheVersion = 7;
 
   final DataDir _dir;
   final ClaudeCli _cli;
@@ -263,13 +264,11 @@ class LinkService implements InjectableWithDisposeInterface {
     _lastCall = now;
     try {
       final run = await _cli.resolveLinks(digest.text, ClaudeCli.linkLookupTools(knownTools, readCommands));
-      // Only what the thread or Haiku's own tool results show survives.
+      // Only links whose URL appears in the thread itself survive; Haiku's
+      // tool results can fill in titles but can't add links.
       final links = run == null
           ? null
-          : LinkDetector.validate(
-              run.items.map(ResolvedLink.fromJson).nonNulls,
-              '${digest.evidence}\n${run.toolResults}',
-            );
+          : LinkDetector.validate(run.items.map(ResolvedLink.fromJson).nonNulls, digest.evidence);
       _cache[threadId] = {
         'hash': hash,
         if (links == null) 'failed': true else 'links': links.map((l) => l.toJson()).toList(),

@@ -97,11 +97,13 @@ class _ThreadColumnState extends State<ThreadColumn> with SingleTickerProviderSt
                               onRename: (name) => widget.vm.rename(t, name),
                             ),
                           ),
+                          // Open tiles are awake, so this always offers sleep;
+                          // sleeping also closes the tile.
                           IconButton(
-                            tooltip: asleep ? 'Wake' : 'Sleep until a new message',
+                            tooltip: 'Sleep until a new message',
                             visualDensity: VisualDensity.compact,
-                            onPressed: () => vm.toggleSleep(t),
-                            icon: Icon(asleep ? Icons.wb_sunny_outlined : Icons.bedtime_outlined, size: 18),
+                            onPressed: () => vm.sleep(t),
+                            icon: const Icon(Icons.bedtime_outlined, size: 18),
                           ),
                           IconButton(
                             tooltip: 'Close',

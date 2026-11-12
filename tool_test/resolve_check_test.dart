@@ -48,7 +48,7 @@ void main() {
     print('--- tool results (${run?.toolResults.length ?? 0} chars) ---\n${(run?.toolResults ?? '').substring(0, (run?.toolResults.length ?? 0).clamp(0, 1500))}');
     final valid = run == null
         ? null
-        : LinkDetector.validate(run.items.map(ResolvedLink.fromJson).nonNulls, '${digest.evidence}\n${run.toolResults}');
+        : LinkDetector.validate(run.items.map(ResolvedLink.fromJson).nonNulls, digest.evidence);
     for (final l in valid ?? const <ResolvedLink>[]) {
       print('${l.kind.name} | ${l.label} | ${l.title} | ${l.state} | ${l.url}');
     }

@@ -364,6 +364,20 @@ void main() {
       await svc.dispose();
     });
 
+    test("a link Haiku only found in its own tool results isn't shown", () async {
+      cli = _FakeCli([
+        {'kind': 'issue', 'provider_name': 'Tracker', 'key': 'OPS-7', 'url': 'https://tracker.example/browse/OPS-7'},
+        {'kind': 'pull_request', 'provider_name': 'Git', 'key': '#9', 'url': 'https://git.example/acme/web/pull/9'},
+      ], toolResults: '{"linked_pr": "https://git.example/acme/web/pull/9"}');
+      final svc = make();
+      svc.linksFor('t1', digest);
+      clock = clock.add(const Duration(seconds: 31));
+      await svc.resolveNow();
+      expect(cli.calls, 1);
+      expect(svc.linksFor('t1', digest).map((l) => l.url), ['https://tracker.example/browse/OPS-7']);
+      await svc.dispose();
+    });
+
     test('no evidence (only references, or only local URLs): no call at all', () async {
       final svc = make();
       for (final d in [
