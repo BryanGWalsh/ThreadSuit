@@ -82,8 +82,9 @@ You can also open the folder in Android Studio or IntelliJ and use the
 - **Rename:** click the pencil next to a title to give it your own name. It
   only changes what Thread Suit shows, never the thread in Claude; save an
   empty name to go back.
-- **Sleep:** the moon button tucks a thread into the Asleep section until a
-  new message arrives; the sun button wakes it sooner.
+- **Sleep:** the moon button tucks a thread into the Asleep section (and
+  closes its tile) until a new message arrives. Opening it again, or the sun
+  button in the list, wakes it sooner.
 - **Light or dark:** use the switch at the top right. Until you flip it,
   Thread Suit follows your system.
 
