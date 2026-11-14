@@ -68,6 +68,11 @@ static void my_application_activate(GApplication* application) {
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
+  // Draw with Skia, not Impeller. Since Flutter 3.47 Impeller's OpenGL
+  // backend is the Linux default, and on some setups (seen on NVIDIA under
+  // X11) the first frames land in the wrong part of the window: only the
+  // bottom-right quarter shows the app and the rest is black.
+  fl_dart_project_set_enable_impeller(project, FALSE);
 
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;
