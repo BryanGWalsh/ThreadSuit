@@ -137,55 +137,67 @@ moved here. If it can't be moved, it's copied and the old folder is left.
 | `ui.json` | `{"theme": "light"}` or `"dark"`, from the title bar switch; no key means follow the system |
 | `titles.json` | Your own names for threads (thread id to name), set with the pencil next to a title |
 | `links.json` | Per thread: the digest hash, the links Haiku found (or `failed`), when, and what it cost |
-| `config.json` | Optional: `{"resolve_links": false}` turns Haiku link lookups off; `share` and `peers` connect copies on your other computers (see [Other computers](#other-computers)) |
+| `config.json` | Optional: `{"resolve_links": false}` turns Haiku link lookups off; `peers` turns off or moves the port for connecting computers (see [Other computers](#other-computers)) |
 | `projects.json` | Project id to name (transcripts only carry the id) |
 | `outbox/<id>.json` | A message waiting to be delivered |
+| `device.json` | This copy's random id and name, as paired computers know it |
+| `peers.json` | Paired computers: id, name, address and the traffic key. Keep it private |
 
 ## Other computers
 
 Threads whose sessions ran on another computer aren't on this one, and
 claude.ai has no public way to list them. So each computer runs its own copy
-of Thread Suit, and the copies talk to each other (`PeerService`). No AI, no
-Claude login.
+of Thread Suit, and paired copies talk to each other (`PeerService`). No AI,
+no Claude login, no server in between.
 
-On the computer whose threads you want to see, turn sharing on in
-`config.json`:
+Each copy listens on TCP and UDP port 47322 on every address
+(`{"peers": {"port": N}}` in `config.json` moves it; `"enabled": false` turns
+it off).
 
-```json
-{"share": {"port": 47322, "address": "100.64.0.5"}}
-```
+**Finding each other:** the Computers dialog broadcasts
+`thread-suit-hello/1` over UDP. Copies answer with
+`{"t": "thread-suit", "id", "name", "port"}`. You can also type an address.
 
-`port` defaults to 47322. `address` is the address to listen on, and defaults
-to every address the computer has. On first start a random `token` (64 hex
-characters) is added to the entry and saved. Tokens shorter than 32
-characters are replaced.
+**Pairing** (`PeerCrypto`): the asking computer A and the asked one B.
 
-On the computer that reads them, list the peer with that token:
+1. A sends `POST /v1/pair/hello` with `{id, name, port, commit}`. `commit` is
+   the SHA-256 of A's new X25519 public key. B makes its own key pair and
+   answers `{id, name, pub}`. B handles one pairing at a time (409
+   otherwise), and drops one after 2 minutes.
+2. A sends `POST /v1/pair/reveal` with `{id, pub}`. B checks it against
+   `commit`. Both now derive, with HKDF from the shared secret and both
+   public keys, a 6-digit code and a 32-byte traffic key. Because A committed
+   to its key before seeing B's, someone in the middle can't try keys until
+   the codes match: they get one guess in a million.
+3. B shows the code and asks whether it matches. A shows the code and polls
+   `POST /v1/pair/status` with `{id}`, which answers `waiting`, `rejected`,
+   `gone`, or `accepted` with a `proof` sealed under the traffic key.
+   `/v1/pair/cancel` stops it from A's side.
 
-```json
-{"peers": [{"name": "Desktop", "url": "http://100.64.0.5:47322", "token": "..."}]}
-```
+Only B's Yes is asked for. A doesn't need a click because you started the
+pairing there. If you see the codes differ, click No on B, or cancel on A.
 
-Both can be in one file, so two computers can read each other.
+Paired computers are kept in `peers.json` (`id`, `name`, `url`, `key`),
+and this copy's own id and name in `device.json`.
 
-The API is HTTP with JSON, and every request needs
-`Authorization: Bearer <token>` (compared in constant time; 401 otherwise):
+**Once paired**, every request is `POST {"from": id, "sealed": ...}`, where
+`sealed` is AES-256-GCM under the traffic key. It is bound to the path and to
+the sender and receiver, and carries a timestamp. Requests more than 2 minutes
+off are refused, as is a sealed request seen before. Answers are sealed the
+same way.
 
-| Request | Answer |
-|---|---|
-| `GET /v1/threads` | `{"threads": [...]}`: this computer's own threads (never ones read from its peers), in the `ThreadSummary.toJson` shape: `thread_id`, `session_id`, `title`, `last_activity_at`, `resolved`, `project`, `links`, `messages_as_of`, `messages` (each `id`, `author`, `from_human`, `sent_at`, `text`, `kind`) |
-| `POST /v1/send` with `{"thread_id", "text"}` | `202 {"queued": id}`: the text is queued in this computer's `outbox/` for that thread's own session (the sender can't choose a session) and delivered as usual. 404 for an unknown thread, 413 over 64 KB |
+| Path | Sealed request | Sealed answer |
+|---|---|---|
+| `/v1/threads` | `{ts}` | `{threads: [...]}`: this computer's own threads, in the `ThreadSummary.toJson` shape |
+| `/v1/send` | `{ts, thread_id, text}` | `{queued: id}`: queued in this computer's `outbox/` for that thread's own session (the sender can't choose a session) and delivered as usual; or `{error}` |
+| `/v1/forget` | `{ts}` | `{ok}`: unpairs on this side too |
 
-The reader polls each peer every 5 seconds. A peer's threads get the id
-`<name>:<thread id>` and `machine: <name>`, so seen, sleep and title state
-are kept apart from local threads. A reply to one is queued in the reader's
-outbox with `machine` set, and `SendService` hands it to the peer instead of
-calling Claude. An unreachable peer is tried again on every pass. A refusal
-(4xx) is final until restart. Errors show at the top of the list.
-
-The traffic is plain HTTP. Anyone on the network path can read it, including
-the token, so use a private network you trust or a VPN such as Tailscale
-(whose own traffic is encrypted). Never expose the port to the internet.
+Each copy polls its paired computers every 5 seconds. A paired computer's
+threads get the id `<its id>:<thread id>`, with `machine` (its name) and
+`machineId`, so seen, sleep and title state stay apart from local threads. A
+reply to one is queued in this outbox with `machine` set to that id, and
+`SendService` hands it over instead of calling Claude. An unreachable
+computer is tried again on every pass. A refusal is final until restart.
 
 ## AI use
 

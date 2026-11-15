@@ -133,7 +133,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
   void rename(ThreadSummary t, String title) => titleService.rename(t.threadId, title);
 
   void send(ThreadSummary t, String text) {
-    outbox.queue(t.threadId, t.sessionId ?? '', text, machine: t.machine);
+    outbox.queue(t.threadId, t.sessionId ?? '', text, machine: t.machineId);
     seenService.markSeen(t);
     sleepService.wake(t);
   }

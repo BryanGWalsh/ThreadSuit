@@ -92,10 +92,11 @@ class ThreadSummary {
   /// The claude.ai project the thread belongs to; null when it has none.
   final String? project;
 
-  /// The other computer this thread is on (its name in `peers` in
-  /// `config.json`), read from the copy of Thread Suit running there; null
-  /// for this computer. Its [threadId] is then `<machine>:<id there>`.
+  /// The paired computer this thread is on, read from the copy of Thread
+  /// Suit running there: its name, and its id (see `PeerService`). Null for
+  /// this computer. Its [threadId] is then `<machineId>:<id there>`.
   final String? machine;
+  final String? machineId;
 
   /// The title from Claude's data when you've renamed the thread in Thread
   /// Suit ([title] is then your name for it); null otherwise.
@@ -105,6 +106,7 @@ class ThreadSummary {
     this.originalTitle,
     this.project,
     this.machine,
+    this.machineId,
     this.links = const [],
     this.messagesAsOf,
     required this.threadId,
@@ -121,6 +123,7 @@ class ThreadSummary {
     originalTitle: originalTitle ?? title,
     project: project,
     machine: machine,
+    machineId: machineId,
     links: links,
     messagesAsOf: messagesAsOf,
     threadId: threadId,
@@ -161,14 +164,15 @@ class ThreadSummary {
     'messages': [for (final m in messages) m.toJson()],
   };
 
-  /// This thread as read from the computer called [name]: tagged with it,
-  /// and with an id that can't clash with this computer's threads.
-  ThreadSummary onMachine(String name) => ThreadSummary(
+  /// This thread as read from the paired computer [name] ([id]): tagged
+  /// with it, and with an id that can't clash with this computer's threads.
+  ThreadSummary onMachine(String name, String id) => ThreadSummary(
     machine: name,
+    machineId: id,
     project: project,
     links: links,
     messagesAsOf: messagesAsOf,
-    threadId: '$name:$threadId',
+    threadId: '$id:$threadId',
     sessionId: sessionId,
     title: title,
     state: state,
@@ -212,8 +216,8 @@ class OutboxMessage {
   final String text;
   final DateTime queuedAt;
 
-  /// The other computer the thread is on ([ThreadSummary.machine]); its copy
-  /// of Thread Suit delivers the message. Null for this computer.
+  /// The paired computer the thread is on ([ThreadSummary.machineId]); its
+  /// copy of Thread Suit delivers the message. Null for this computer.
   final String? machine;
 
   const OutboxMessage({

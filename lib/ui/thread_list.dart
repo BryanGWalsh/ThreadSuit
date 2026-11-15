@@ -78,9 +78,8 @@ class _ThreadListState extends State<ThreadList> {
           ),
         ),
         for (final problem in [
-          if (vm.peerService.shareError != null) vm.peerService.shareError!,
           for (final p in vm.peers)
-            if (p.error != null) "Can't reach ${p.config.name}: ${p.error}",
+            if (p.error != null) "Can't reach ${p.peer.name}: ${p.error}",
         ])
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),

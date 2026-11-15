@@ -17,6 +17,7 @@ import 'services/theme_service.dart';
 import 'services/title_service.dart';
 import 'services/workspace_service.dart';
 import 'ui/app_theme.dart';
+import 'ui/computers.dart';
 import 'ui/dashboard_view_model.dart';
 import 'ui/thread_column.dart';
 import 'ui/thread_list.dart';
@@ -205,40 +206,44 @@ class DashboardScreen extends StatelessWidget {
               icon: const Icon(Icons.done_all),
               label: Text('Mark ${vm.unreadCount} seen'),
             ),
-          const SizedBox(width: 12),
+          ComputersButton(peers: vm.peerService),
+          const SizedBox(width: 4),
           ThemeToggle(themes: vm.themes),
           const SizedBox(width: 12),
         ],
       ),
-      body: snap == null
-          ? Center(child: Text(vm.snapshotError ?? 'Loading…', textAlign: TextAlign.center))
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: 360,
-                  child: ColoredBox(
-                    color: theme.colorScheme.surface,
-                    child: ThreadList(vm: vm),
+      body: PairingPrompt(
+        peers: vm.peerService,
+        child: snap == null
+            ? Center(child: Text(vm.snapshotError ?? 'Loading…', textAlign: TextAlign.center))
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: 360,
+                    child: ColoredBox(
+                      color: theme.colorScheme.surface,
+                      child: ThreadList(vm: vm),
+                    ),
                   ),
-                ),
-                const VerticalDivider(width: 1),
-                Expanded(
-                  child: open.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'Click threads to open them.\nEach one opens as a new tile.',
-                            textAlign: TextAlign.center,
+                  const VerticalDivider(width: 1),
+                  Expanded(
+                    child: open.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'Click threads to open them.\nEach one opens as a new tile.',
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : TileGrid(
+                            children: [
+                              for (final t in open) ThreadColumn(key: GlobalObjectKey(t.threadId), vm: vm, thread: t),
+                            ],
                           ),
-                        )
-                      : TileGrid(
-                          children: [
-                            for (final t in open) ThreadColumn(key: GlobalObjectKey(t.threadId), vm: vm, thread: t),
-                          ],
-                        ),
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }

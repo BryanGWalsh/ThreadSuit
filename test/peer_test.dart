@@ -6,8 +6,10 @@ import 'package:thread_suit/models/models.dart';
 import 'package:thread_suit/services/claude_cli.dart';
 import 'package:thread_suit/services/data_dir.dart';
 import 'package:thread_suit/services/outbox_service.dart';
+import 'package:thread_suit/services/peer_crypto.dart';
 import 'package:thread_suit/services/peer_service.dart';
 import 'package:thread_suit/services/send_service.dart';
+import 'package:thread_suit/ui/computers.dart';
 import 'package:thread_suit/ui/format.dart';
 
 class _NoCli extends ClaudeCli {
@@ -41,133 +43,208 @@ ThreadSummary _thread(String id) => ThreadSummary(
   ],
 );
 
+/// One computer: its data folder, outbox and peer service, on 127.0.0.1.
+class _Computer {
+  final DataDir dir;
+  final OutboxService outbox;
+  final PeerService peers;
+  _Computer(this.dir, this.outbox, this.peers);
+
+  Uri get url => Uri.parse('http://127.0.0.1:${peers.listeningPort}');
+
+  static Future<_Computer> start(Directory root, String name, {List<ThreadSummary> threads = const []}) async {
+    final dir = DataDir.at('${root.path}/$name');
+    final outbox = OutboxService(dir);
+    final peers = PeerService(
+      dir,
+      () => Snapshot(generatedAt: DateTime.now(), projectName: '', threads: threads),
+      outbox,
+      device: Device('id-$name', name),
+      port: 0,
+      address: InternetAddress.loopbackIPv4,
+    );
+    await peers.ready;
+    addTearDown(() async {
+      await peers.dispose();
+      await outbox.dispose();
+    });
+    return _Computer(dir, outbox, peers);
+  }
+}
+
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('peer'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
-  DataDir dataDir(String name) => DataDir.at('${tmp.path}/$name');
+  group('crypto', () {
+    test('both sides get the same code and key; a different key gets a different code', () async {
+      final a = await PeerCrypto.newKeyPair(), b = await PeerCrypto.newKeyPair(), m = await PeerCrypto.newKeyPair();
+      final pa = await PeerCrypto.publicKey(a), pb = await PeerCrypto.publicKey(b), pm = await PeerCrypto.publicKey(m);
+      final onA = await PeerCrypto.agree(a, pb, startPub: pa, answerPub: pb);
+      final onB = await PeerCrypto.agree(b, pa, startPub: pa, answerPub: pb);
+      expect(onA.code, onB.code);
+      expect(onA.code, matches(RegExp(r'^\d{6}$')));
+      expect(onA.key, onB.key);
+      expect(onA.key, hasLength(32));
+      // Someone in the middle has a different key with each side.
+      final middle = await PeerCrypto.agree(a, pm, startPub: pa, answerPub: pm);
+      expect(middle.key, isNot(onA.key));
+      expect(PeerCrypto.spaced('123456'), '123 456');
 
-  test('config: share makes and saves a token, keeping other keys; bad peers are skipped', () {
-    final dir = dataDir('a');
-    File(dir.config).writeAsStringSync(
-      jsonEncode({
-        'resolve_links': false,
-        'share': {'port': 5000, 'token': 'short'},
-      }),
-    );
-    final share = ShareConfig.read(dir)!;
-    expect(share.port, 5000);
-    expect(share.token.length, greaterThanOrEqualTo(ShareConfig.minTokenLength));
-    final saved = jsonDecode(File(dir.config).readAsStringSync()) as Map;
-    expect(saved['resolve_links'], false);
-    expect(saved['share']['token'], share.token);
-    expect(ShareConfig.read(dir)!.token, share.token, reason: 'made only once');
+      expect(await PeerCrypto.checkCommit(await PeerCrypto.commit(pa), pa), isTrue);
+      expect(await PeerCrypto.checkCommit(await PeerCrypto.commit(pa), pm), isFalse);
+    });
 
-    expect(ShareConfig.read(dataDir('none')), isNull, reason: 'off without a share entry');
-
-    final peers = PeerConfig.parse([
-      {'name': 'Lap:top', 'url': 'http://10.0.0.2:47322', 'token': 't'},
-      {'url': 'https://box.example:9', 'token': 't'},
-      {'url': 'ftp://x', 'token': 't'},
-      {'url': 'http://x'},
-      'nope',
-    ]);
-    expect(peers.map((p) => p.name), ['Lap top', 'box.example']);
+    test('a sealed message opens only with its key and for its purpose', () async {
+      final key = List.generate(32, (i) => i), other = List.generate(32, (i) => 31 - i);
+      final sealed = await PeerCrypto.seal(key, {'text': 'hi'}, 'send a->b');
+      expect(sealed, isNot(contains('hi')));
+      expect(await PeerCrypto.open(key, sealed, 'send a->b'), {'text': 'hi'});
+      expect(await PeerCrypto.open(other, sealed, 'send a->b'), isNull);
+      expect(await PeerCrypto.open(key, sealed, 'send b->a'), isNull);
+      expect(await PeerCrypto.open(key, 'not base64!', 'send a->b'), isNull);
+    });
   });
 
-  test('a thread survives the trip: toJson, fromJson, tagged with its computer', () {
+  test('a thread survives the trip and is tagged with its computer', () {
     final back = ThreadSummary.fromJson(jsonDecode(jsonEncode(_thread('login').toJson())) as Map<String, dynamic>);
-    final t = back.onMachine('Laptop');
-    expect(t.threadId, 'Laptop:login');
-    expect(t.machine, 'Laptop');
-    expect(t.sessionId, 'local_login');
-    expect(t.title, 'Fix the login');
+    final t = back.onMachine('Desktop', 'id-desk');
+    expect(t.threadId, 'id-desk:login');
+    expect((t.machine, t.machineId, t.sessionId, t.title), ('Desktop', 'id-desk', 'local_login', 'Fix the login'));
     expect(t.messages.map((m) => (m.text, m.fromHuman, m.isNotes)), [('go', true, false), ('done', false, true)]);
-    expect(origin(t), 'Project: Shop · on Laptop');
+    expect(origin(t), 'Project: Shop · on Desktop');
     expect(origin(_thread('x')), 'Project: Shop');
   });
 
-  test("two copies: one reads the other's threads and replies; the owner queues the reply", () async {
-    // Desktop shares its threads; Laptop reads them.
-    final deskDir = dataDir('desk'), lapDir = dataDir('lap');
-    final deskOutbox = OutboxService(deskDir), lapOutbox = OutboxService(lapDir);
-    addTearDown(deskOutbox.dispose);
-    addTearDown(lapOutbox.dispose);
-    final token = ShareConfig.newToken();
-    final desk = PeerService(
-      deskDir,
-      () => Snapshot(generatedAt: DateTime.now(), projectName: '', threads: [_thread('login')]),
-      deskOutbox,
-      share: ShareConfig(port: 0, address: '127.0.0.1', token: token),
-      read: false,
-    );
-    addTearDown(desk.dispose);
-    while (desk.sharePort == null) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-    PeerService reader(String withToken) => PeerService(
-      lapDir,
-      () => null,
-      lapOutbox,
-      peers: [PeerConfig(name: 'Desktop', url: Uri.parse('http://127.0.0.1:${desk.sharePort}'), token: withToken)],
-      read: false,
-    );
-
-    final wrong = reader('x' * 64);
-    addTearDown(wrong.dispose);
-    await wrong.pollNow();
-    expect(wrong.status.single.threads, isEmpty);
-    expect(wrong.status.single.error, 'Wrong or missing token');
-
-    final lap = reader(token);
-    addTearDown(lap.dispose);
-    await lap.pollNow();
-    final seen = lap.status.single;
-    expect(seen.error, isNull);
-    expect(seen.threads.single.threadId, 'Desktop:login');
-    expect(seen.threads.single.machine, 'Desktop');
-
-    // A reply typed on the laptop goes to the desktop's outbox, with no Claude call here.
-    final cli = _NoCli();
-    final sender = SendService(lapOutbox, cli, null, null, lap);
-    addTearDown(sender.dispose);
-    // Delivery starts by itself once the outbox shows the message.
-    lapOutbox.queue('Desktop:login', 'local_login', 'ship it', machine: 'Desktop');
-    final queued = await deskOutbox.pendingStream.firstWhere((p) => p.isNotEmpty);
-    expect(queued.single.threadId, 'login');
-    expect(queued.single.sessionId, 'local_login');
-    expect(queued.single.text, 'ship it');
-    expect(queued.single.machine, isNull);
-    await lapOutbox.pendingStream.firstWhere((p) => p.isEmpty);
-    expect(cli.calls, 0);
-
-    // Unknown threads are refused for good, not retried.
-    lapOutbox.queue('Desktop:nope', 's', 'hi', machine: 'Desktop');
-    await sender.statusStream.firstWhere((s) => s.values.any((v) => v.contains('No such thread')));
-    await sender.deliverNow();
-    expect(lapOutbox.pendingStream, emits(hasLength(1)), reason: 'kept, marked not sent');
+  test('typed addresses get the default port', () {
+    expect(ComputersDialogTestHooks.parse('192.168.1.20'), Uri.parse('http://192.168.1.20:47322'));
+    expect(ComputersDialogTestHooks.parse(' desk.ts.net:5000 '), Uri.parse('http://desk.ts.net:5000'));
+    expect(ComputersDialogTestHooks.parse(''), isNull);
   });
 
-  test('an unreachable peer keeps its last threads and is retried', () async {
-    final dir = dataDir('c');
-    final outbox = OutboxService(dir);
-    addTearDown(outbox.dispose);
-    final p = PeerService(
-      dir,
-      () => null,
-      outbox,
-      // Nothing listens on port 1.
-      peers: [PeerConfig(name: 'Gone', url: Uri.parse('http://127.0.0.1:1'), token: 't')],
-      read: false,
-    );
-    addTearDown(p.dispose);
-    await p.pollNow();
-    expect(p.status.single.error, isNotNull);
+  test(
+    'pairing: both show the same code, Yes on the asked computer pairs both, then threads and replies flow',
+    () async {
+      final desk = await _Computer.start(tmp, 'Desktop', threads: [_thread('login')]);
+      final lap = await _Computer.start(tmp, 'Laptop');
 
-    final sender = SendService(outbox, _NoCli(), null, null, p);
+      // The laptop finds the desktop on the "network".
+      lap.peers.discover(to: InternetAddress.loopbackIPv4, toPort: desk.peers.listeningPort);
+      final found = await lap.peers.foundStream.firstWhere((f) => f.isNotEmpty);
+      expect(found.single.name, 'Desktop');
+      expect(found.single.url, desk.url);
+
+      final pairing = lap.peers.pairWith(found.single.url);
+      final asked = await desk.peers.incomingStream.firstWhere((p) => p != null);
+      final shown = await lap.peers.outgoingStream.firstWhere((o) => o?.step == PairingStep.comparing);
+      expect(asked!.name, 'Laptop');
+      expect(asked.code, shown!.code);
+
+      desk.peers.answerIncoming(true);
+      await pairing;
+      expect(lap.peers.outgoing!.step, PairingStep.paired);
+      expect(lap.peers.peers.single.name, 'Desktop');
+      expect(desk.peers.peers.single.name, 'Laptop');
+      expect(desk.peers.peers.single.url, lap.url);
+      expect(lap.peers.peers.single.key, desk.peers.peers.single.key);
+      // Saved, and nothing is in plain text but the key itself.
+      expect(File(lap.dir.paired).readAsStringSync(), contains('id-Desktop'));
+
+      await lap.peers.pollNow();
+      final seen = lap.peers.status.single;
+      expect(seen.error, isNull);
+      expect(seen.threads.single.threadId, 'id-Desktop:login');
+      expect(seen.threads.single.machine, 'Desktop');
+
+      // A reply typed on the laptop is queued on the desktop for that thread's session.
+      final cli = _NoCli();
+      final sender = SendService(lap.outbox, cli, null, null, lap.peers);
+      addTearDown(sender.dispose);
+      lap.outbox.queue('id-Desktop:login', 'local_login', 'ship it', machine: 'id-Desktop');
+      final queued = await desk.outbox.pendingStream.firstWhere((p) => p.isNotEmpty);
+      expect(
+        (queued.single.threadId, queued.single.sessionId, queued.single.text),
+        ('login', 'local_login', 'ship it'),
+      );
+      expect(queued.single.machine, isNull);
+      await lap.outbox.pendingStream.firstWhere((p) => p.isEmpty);
+      expect(cli.calls, 0, reason: 'the desktop delivers it, not the laptop');
+
+      lap.outbox.queue('id-Desktop:nope', 's', 'hi', machine: 'id-Desktop');
+      await sender.statusStream.firstWhere((s) => s.values.any((v) => v.contains('No such thread on Desktop')));
+
+      // Unpairing on one side unpairs both.
+      await lap.peers.forget('id-Desktop');
+      expect(lap.peers.peers, isEmpty);
+      expect(desk.peers.peers, isEmpty);
+    },
+  );
+
+  test('No on the asked computer pairs nothing', () async {
+    final desk = await _Computer.start(tmp, 'Desktop');
+    final lap = await _Computer.start(tmp, 'Laptop');
+    final pairing = lap.peers.pairWith(desk.url);
+    await desk.peers.incomingStream.firstWhere((p) => p != null);
+    desk.peers.answerIncoming(false);
+    await pairing;
+    expect(lap.peers.outgoing!.step, PairingStep.rejected);
+    expect(lap.peers.peers, isEmpty);
+    expect(desk.peers.peers, isEmpty);
+  });
+
+  test('cancelling on the asking computer closes the prompt on the other', () async {
+    final desk = await _Computer.start(tmp, 'Desktop');
+    final lap = await _Computer.start(tmp, 'Laptop');
+    final pairing = lap.peers.pairWith(desk.url);
+    await desk.peers.incomingStream.firstWhere((p) => p != null);
+    lap.peers.cancelPairing();
+    await desk.peers.incomingStream.firstWhere((p) => p == null);
+    await pairing;
+    expect(desk.peers.peers, isEmpty);
+  });
+
+  test('unpaired or forged requests are refused', () async {
+    final desk = await _Computer.start(tmp, 'Desktop', threads: [_thread('login')]);
+    final client = HttpClient();
+    addTearDown(client.close);
+    Future<(int, String)> post(String path, Object body) async {
+      final req = await client.postUrl(desk.url.resolve(path));
+      req.write(jsonEncode(body));
+      final res = await req.close();
+      return (res.statusCode, await res.transform(utf8.decoder).join());
+    }
+
+    expect((await post('/v1/threads', {'from': 'stranger', 'sealed': 'x'})).$1, HttpStatus.unauthorized);
+    final forged = await PeerCrypto.seal(List.filled(32, 7), {'ts': DateTime.now().toUtc().toIso8601String()}, 'x');
+    expect((await post('/v1/threads', {'from': 'id-Laptop', 'sealed': forged})).$1, HttpStatus.unauthorized);
+    final (code, body) = await post('/v1/pair/reveal', {'id': 'x', 'pub': 'AAAA'});
+    expect(code, HttpStatus.notFound);
+    expect(body, isNot(contains('login')));
+  });
+
+  test('an unreachable computer is waited for, not given up on', () async {
+    final lap = await _Computer.start(tmp, 'Laptop');
+    File(lap.dir.paired).writeAsStringSync(
+      jsonEncode([
+        // Nothing listens on port 1.
+        PairedPeer(id: 'id-Gone', name: 'Gone', url: Uri.parse('http://127.0.0.1:1'), key: List.filled(32, 1)).toJson(),
+      ]),
+    );
+    final again = PeerService(
+      lap.dir,
+      () => null,
+      lap.outbox,
+      device: const Device('id-Laptop', 'Laptop'),
+      enabled: false,
+    );
+    addTearDown(again.dispose);
+    await again.pollNow();
+    expect(again.status.single.error, isNotNull);
+
+    final sender = SendService(lap.outbox, _NoCli(), null, null, again);
     addTearDown(sender.dispose);
-    outbox.queue('Gone:t', 's', 'hi', machine: 'Gone');
+    lap.outbox.queue('id-Gone:t', 's', 'hi', machine: 'id-Gone');
     await sender.statusStream.firstWhere((s) => s.values.contains('Waiting for Gone to be reachable'));
   });
 }

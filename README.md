@@ -107,30 +107,24 @@ To remove it: `python3 tools/install_hook.py --uninstall`.
 ## Threads on your other computers (optional)
 
 If some of your threads run on another computer, run Thread Suit there too
-and connect the two. Each copy shows the other's threads, labelled "on
-Desktop", and you can reply to them. The other computer delivers the reply
-to its own session, the same way it would if you'd typed it there.
+and pair the two:
 
-1. On the computer to share from, add this to `~/.thread-suit/config.json`
-   and start Thread Suit:
+1. On one computer, click the computers button in the top bar. Computers on
+   the same network running Thread Suit show up there. Click **Pair** next to
+   the other one, or type its address.
+2. Both screens show the same 6-digit code. If they match, click **Yes** on
+   the other computer. That one click pairs both.
 
-   ```json
-   {"share": {}}
-   ```
+Each computer then shows the other's threads, labelled "on Desktop", and you
+can reply to them. The computer the thread runs on delivers your reply to its
+own session, the same way it would if you'd typed it there.
 
-   Thread Suit adds a random `token` to that entry. Copy it.
-2. On the computer you read from, add the first computer with that token:
-
-   ```json
-   {"peers": [{"name": "Desktop", "url": "http://desktop-address:47322", "token": "the token"}]}
-   ```
-
-Anyone with the token can read those threads and send messages into them,
-so keep it private. The connection isn't encrypted, so only use it on a
-network you trust, or over a VPN such as [Tailscale](https://tailscale.com),
-which also lets the computers reach each other away from home. Never open
-the port to the internet. Details are in
-[docs/FILE_FORMAT.md](docs/FILE_FORMAT.md#other-computers).
+Everything between paired computers is encrypted with a key only those two
+have, and the code makes sure nobody in between swapped it. Away from home,
+connect the computers with a VPN such as [Tailscale](https://tailscale.com)
+and type the other one's Tailscale name. To turn this off entirely, put
+`{"peers": {"enabled": false}}` in `~/.thread-suit/config.json`. Details are
+in [docs/FILE_FORMAT.md](docs/FILE_FORMAT.md#other-computers).
 
 ## How links work
 
@@ -204,8 +198,9 @@ analytics. It reads Claude's local files and writes only to its own folder,
 - **Finding links:** a short summary of a thread's URLs and tool calls (never
   the whole conversation), sent the same way. You can turn it off.
 - **Opening a link:** your browser opens it, as usual.
-- **Sharing with your other computers (only if you turn it on):** the
-  thread list, and replies to it, go between your own copies of Thread Suit.
+- **Your paired computers:** the thread list, and replies to it, go
+  encrypted between your own copies of Thread Suit, and only once you've
+  paired them.
 
 ## Disclaimer
 

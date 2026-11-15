@@ -56,4 +56,10 @@ class DataDir {
   String get titles => p.join(path, 'titles.json');
   String get ui => p.join(path, 'ui.json');
   String get outbox => p.join(path, 'outbox');
+
+  /// This copy's id and name, as paired computers know it.
+  String get device => p.join(path, 'device.json');
+
+  /// The computers this one is paired with, and their keys.
+  String get paired => p.join(path, 'peers.json');
 }

@@ -119,17 +119,19 @@ class SendService implements InjectableWithDisposeInterface {
   /// tried again on every pass (it costs nothing); a refusal is final.
   Future<void> _handOff(OutboxMessage m) async {
     if (_refused.contains(m.id)) return;
-    if (_peers == null) return _set(m.id, 'Not sent: ${m.machine} is not set up');
-    _set(m.id, 'Sending to ${m.machine}…');
+    final peers = _peers;
+    if (peers == null) return _set(m.id, 'Not sent: connecting computers is off');
+    final name = peers.nameOf(m.machine!);
+    _set(m.id, 'Sending to $name…');
     try {
-      await _peers.send(m);
+      await peers.send(m);
       _outbox.remove(m);
       _set(m.id, null);
     } on PeerRefused catch (e) {
       _refused.add(m.id);
-      _set(m.id, 'Not sent: ${m.machine} said "$e"');
+      _set(m.id, 'Not sent: $e');
     } catch (e) {
-      _set(m.id, 'Waiting for ${m.machine} to be reachable');
+      _set(m.id, 'Waiting for $name to be reachable');
     }
   }
 
