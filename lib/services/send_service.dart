@@ -9,11 +9,13 @@ import 'package:rxdart/rxdart.dart';
 import '../models/models.dart';
 import '../platform/claude_platform.dart';
 import 'claude_cli.dart';
+import 'machines_service.dart';
 import 'outbox_service.dart';
 
-/// Delivers queued messages to their thread's running Claude session on this
-/// computer, one short Haiku `claude -p` call per message. A message for a thread
-/// whose session isn't running waits until it is.
+/// Delivers queued messages to their thread's running Claude session, one
+/// short Haiku `claude -p` call per message. For a thread on another
+/// computer, that call runs there over SSH ([MachinesService]). A message for
+/// a thread whose session isn't running waits until it is.
 class SendService implements InjectableWithDisposeInterface {
   final OutboxService _outbox;
   final ClaudeCli _cli;
@@ -30,7 +32,9 @@ class SendService implements InjectableWithDisposeInterface {
 
   final DateTime Function() _now;
 
-  SendService(this._outbox, this._cli, [ClaudePlatform? platform, DateTime Function()? now])
+  final MachinesService? _machines;
+
+  SendService(this._outbox, this._cli, [ClaudePlatform? platform, DateTime Function()? now, this._machines])
     : _platform = platform ?? ClaudePlatform.current,
       _now = now ?? DateTime.now {
     _sub = _outbox.pendingStream.listen((p) {
@@ -40,9 +44,11 @@ class SendService implements InjectableWithDisposeInterface {
     _timer = Timer.periodic(const Duration(seconds: 15), (_) => _deliver());
   }
 
-  /// Name of the live CLI process serving the desktop session [localId], if any.
-  Future<String?> runningSessionName(String localId) async {
-    final dir = Directory(_platform.runningSessionsDir);
+  /// Name of the live CLI process serving the desktop session [localId], if
+  /// any: on this computer, or on [machine] (from the copy of its records,
+  /// checking the process over SSH).
+  Future<String?> runningSessionName(String localId, {MachineStatus? machine}) async {
+    final dir = Directory(machine?.runningDir ?? _platform.runningSessionsDir);
     if (!dir.existsSync()) return null;
     for (final f in dir.listSync().whereType<File>().where((f) => f.path.endsWith('.json'))) {
       try {
@@ -50,7 +56,10 @@ class SendService implements InjectableWithDisposeInterface {
         if (d['hostSessionId'] != localId) continue;
         final pid = d['pid'] as int?;
         if (pid == null) continue;
-        if (await _platform.isProcessAlive(pid)) return d['name'] as String?;
+        final alive = machine == null
+            ? await _platform.isProcessAlive(pid)
+            : await _machines!.isProcessAlive(machine.config, pid);
+        if (alive) return d['name'] as String?;
       } catch (_) {}
     }
     return null;
@@ -78,16 +87,24 @@ class SendService implements InjectableWithDisposeInterface {
           if (tries >= maxTries) continue;
           if (_now().difference(at) < retryDelays[tries - 1]) continue;
         }
-        // Checking whether the session runs is local and free; only sending calls Claude.
-        final name = await runningSessionName(m.sessionId);
+        MachineStatus? machine;
+        if (m.machine != null) {
+          machine = _machines?.byName(m.machine);
+          if (machine == null) {
+            _set(m.id, '${m.machine} is no longer in config.json');
+            continue;
+          }
+        }
+        // Checking whether the session runs is free; only sending calls Claude.
+        final name = await runningSessionName(m.sessionId, machine: machine);
         if (name == null) {
-          _set(m.id, "Waiting for the thread's session to start on this computer");
+          _set(m.id, "Waiting for the thread's session to start on ${m.machine ?? 'this computer'}");
           continue;
         }
         _set(m.id, 'Sending…');
         String? error;
         try {
-          error = await _cli.sendToSession(name, m.text);
+          error = await _cli.sendToSession(name, m.text, machine: machine?.config);
         } catch (e) {
           error = '$e';
         }

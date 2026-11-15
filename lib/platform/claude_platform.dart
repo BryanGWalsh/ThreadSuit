@@ -57,6 +57,29 @@ abstract class ClaudePlatform {
   /// copied, and only what changed. Null where Thread Suit can't do that yet.
   List<String>? mirrorCommand({required String host, required String remoteDir, required String localDir});
 
+  /// Runs [command] on another computer over the user's own SSH login to
+  /// [host]. BatchMode makes ssh fail instead of asking for a password,
+  /// since nobody can type one; keys or an agent are needed. Every OS this
+  /// app runs on ships an OpenSSH client.
+  List<String> sshCommand(String host, String command) => [
+    'ssh',
+    '-o',
+    'BatchMode=yes',
+    '-o',
+    'ConnectTimeout=10',
+    host,
+    command,
+  ];
+
+  /// A shell command, for a computer of this OS reached over SSH, that runs
+  /// `claude` with [args]: the native installer's location if present,
+  /// otherwise whatever `PATH` finds. Null where that isn't supported yet.
+  String? remoteClaudeCommand(List<String> args);
+
+  /// A shell command, for a computer of this OS reached over SSH, that exits
+  /// 0 only if process [pid] is running. Null where that isn't supported yet.
+  String? remoteProcessCheck(int pid);
+
   /// The desktop app's records of Code sessions (title, folder, transcript id).
   String get desktopSessionsDir => paths.join(claudeDesktopDir, 'claude-code-sessions');
 
@@ -172,8 +195,7 @@ abstract class _UnixPlatform extends ClaudePlatform {
   @override
   List<String> processCheckCommand(int pid) => ['/bin/kill', '-0', '$pid'];
 
-  /// rsync over ssh. BatchMode makes ssh fail instead of asking for a
-  /// password, since nobody can type one; keys or an agent are needed.
+  /// rsync over [sshCommand]'s ssh options.
   @override
   List<String>? mirrorCommand({required String host, required String remoteDir, required String localDir}) => [
     'rsync',
@@ -189,6 +211,21 @@ abstract class _UnixPlatform extends ClaudePlatform {
     '$host:$remoteDir/',
     '$localDir/',
   ];
+
+  /// [value] as one POSIX shell word.
+  static String shellQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";
+
+  /// Wrapped in `sh -c`, since the login shell on the other end may not be
+  /// a POSIX one (fish, for example).
+  @override
+  String remoteClaudeCommand(List<String> args) {
+    final script =
+        r'c="$HOME/.local/bin/claude"; [ -x "$c" ] || c=claude; cd /tmp && exec "$c" ' + args.map(shellQuote).join(' ');
+    return 'sh -c ${shellQuote(script)}';
+  }
+
+  @override
+  String remoteProcessCheck(int pid) => 'kill -0 $pid';
 }
 
 class MacOSPlatform extends _UnixPlatform {
@@ -263,6 +300,13 @@ class WindowsPlatform extends ClaudePlatform {
   /// Windows has no rsync, so reading another computer isn't supported here yet.
   @override
   List<String>? mirrorCommand({required String host, required String remoteDir, required String localDir}) => null;
+
+  /// Windows computers aren't read over SSH yet, so nothing is run on them.
+  @override
+  String? remoteClaudeCommand(List<String> args) => null;
+
+  @override
+  String? remoteProcessCheck(int pid) => null;
 
   @override
   String get defaultPath => r'C:\Windows\System32;C:\Windows';

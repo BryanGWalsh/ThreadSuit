@@ -173,7 +173,12 @@ class OutboxMessage {
   final String text;
   final DateTime queuedAt;
 
+  /// The other computer the session runs on (a `machines` name from
+  /// `config.json`); null for this computer.
+  final String? machine;
+
   const OutboxMessage({
+    this.machine,
     required this.id,
     required this.threadId,
     required this.sessionId,
@@ -187,6 +192,7 @@ class OutboxMessage {
     'session_id': sessionId,
     'text': text,
     'queued_at': queuedAt.toUtc().toIso8601String(),
+    'machine': ?machine,
   };
 
   factory OutboxMessage.fromJson(Map<String, dynamic> j) => OutboxMessage(
@@ -195,5 +201,6 @@ class OutboxMessage {
     sessionId: (j['session_id'] as String?) ?? '',
     text: j['text'] as String,
     queuedAt: DateTime.parse(j['queued_at'] as String),
+    machine: j['machine'] as String?,
   );
 }

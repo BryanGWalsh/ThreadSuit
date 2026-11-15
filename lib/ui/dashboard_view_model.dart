@@ -129,9 +129,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
   void rename(ThreadSummary t, String title) => titleService.rename(t.threadId, title);
 
   void send(ThreadSummary t, String text) {
-    // Messages can only be delivered to sessions on this computer.
-    if (t.machine != null) return;
-    outbox.queue(t.threadId, t.sessionId ?? '', text);
+    outbox.queue(t.threadId, t.sessionId ?? '', text, machine: t.machine);
     seenService.markSeen(t);
     sleepService.wake(t);
   }

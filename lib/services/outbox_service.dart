@@ -24,12 +24,21 @@ class OutboxService implements InjectableWithDisposeInterface {
     _timer = Timer.periodic(const Duration(seconds: 2), (_) => _scan());
   }
 
-  void queue(String threadId, String sessionId, String text) {
+  /// Queues [text] for the session [sessionId], which runs on [machine]
+  /// (null: this computer).
+  void queue(String threadId, String sessionId, String text, {String? machine}) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
     final now = DateTime.now().toUtc();
     final id = '${now.millisecondsSinceEpoch}-${Random().nextInt(1 << 32).toRadixString(16)}';
-    final msg = OutboxMessage(id: id, threadId: threadId, sessionId: sessionId, text: trimmed, queuedAt: now);
+    final msg = OutboxMessage(
+      id: id,
+      threadId: threadId,
+      sessionId: sessionId,
+      text: trimmed,
+      queuedAt: now,
+      machine: machine,
+    );
     // Write to a temp name first so the sender never reads a partial file.
     final tmp = File(p.join(_dir.outbox, '.$id.tmp'));
     tmp.writeAsStringSync(jsonEncode(msg.toJson()));

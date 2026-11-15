@@ -60,8 +60,8 @@ Injector buildRootInjector(DataDir dir, [ClaudePlatform? platform]) {
       (d) => MachinesService(d.get<DataDir>(), os),
     ),
     InjectableFactory.withDependencies<SendService>(
-      DependencyDataBuilder.list([OutboxService, ClaudeCli]),
-      (d) => SendService(d.get<OutboxService>(), d.get<ClaudeCli>(), os),
+      DependencyDataBuilder.list([OutboxService, ClaudeCli, MachinesService]),
+      (d) => SendService(d.get<OutboxService>(), d.get<ClaudeCli>(), os, null, d.get<MachinesService>()),
     ),
     InjectableFactory.withDependencies<SeenService>(
       DependencyDataBuilder.list([DataDir]),

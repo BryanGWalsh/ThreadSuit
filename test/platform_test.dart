@@ -86,6 +86,36 @@ void main() {
       expect(cmd.sublist(cmd.length - 2), ['me@box:a b/', '/m/']);
     });
 
+    test('another computer: run claude and check a process over ssh', () {
+      final linux = fake('linux', {'HOME': '/home/ann'});
+      expect(linux.sshCommand('me@box', 'kill -0 7'), [
+        'ssh',
+        '-o',
+        'BatchMode=yes',
+        '-o',
+        'ConnectTimeout=10',
+        'me@box',
+        'kill -0 7',
+      ]);
+      expect(linux.remoteProcessCheck(7), 'kill -0 7');
+      expect(linux.remoteClaudeCommand(['-p', 'x']), startsWith('sh -c '));
+    });
+
+    test('the remote claude command survives quotes and finds ~/.local/bin/claude', () async {
+      final home = Directory.systemTemp.createTempSync('remote');
+      final bin = Directory('${home.path}/.local/bin')..createSync(recursive: true);
+      // A stand-in claude that prints its arguments, one per line.
+      final claude = File('${bin.path}/claude')
+        ..writeAsStringSync('#!/bin/sh\nfor a in "\$@"; do echo "[\$a]"; done\n');
+      await Process.run('chmod', ['+x', claude.path]);
+      final args = ['-p', "it's \$HOME `x` \"q\" \\ ;|&", '--allowedTools', 'SendMessage'];
+      final cmd = fake('linux', {}).remoteClaudeCommand(args)!;
+      // What ssh does with it on the other end: hand it to the login shell.
+      final r = await Process.run('sh', ['-c', cmd], environment: {'HOME': home.path, 'PATH': '/usr/bin:/bin'});
+      expect('${r.stdout}'.trim().split('\n'), [for (final a in args) '[$a]']);
+      home.deleteSync(recursive: true);
+    }, skip: Platform.isWindows ? 'needs sh' : null);
+
     test('other Unix-likes use the Linux layout', () {
       expect(fake('freebsd', {'HOME': '/home/ann'}), isA<LinuxPlatform>());
     });
@@ -124,6 +154,10 @@ void main() {
     test("another computer: desktop folder; no rsync, so it can't copy yet", () {
       expect(win.desktopDirFromHome, 'AppData/Roaming/Claude');
       expect(win.mirrorCommand(host: 'box', remoteDir: 'x', localDir: r'C:\m'), isNull);
+      expect(win.remoteClaudeCommand(['-p']), isNull);
+      expect(win.remoteProcessCheck(1), isNull);
+      // Windows ships an OpenSSH client, so it can still reach other computers.
+      expect(win.sshCommand('box', 'true').first, 'ssh');
     });
   });
 

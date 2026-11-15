@@ -57,6 +57,10 @@ class MachineStatus {
   final String sessionsDir;
   final String transcriptsDir;
 
+  /// The local copy of its running-session records (Claude Code's
+  /// `sessions/*.json`), to find where to deliver a message.
+  String get runningDir => p.join(p.dirname(sessionsDir), 'running');
+
   /// When a copy last succeeded; null if none has yet.
   final DateTime? syncedAt;
 
@@ -140,6 +144,8 @@ class MachinesService implements InjectableWithDisposeInterface {
       ('${remote.desktopDirFromHome}/claude-code-sessions', m.sessionsDir),
       // Like Claude Code's default; CLAUDE_CONFIG_DIR on the other computer isn't known.
       ('.claude/projects', m.transcriptsDir),
+      // Only the .json records; the .key files next to them stay there.
+      ('.claude/sessions', m.runningDir),
     ];
     for (final (from, to) in copies) {
       final cmd = _platform.mirrorCommand(host: m.config.host, remoteDir: from, localDir: to);
@@ -163,6 +169,21 @@ class MachinesService implements InjectableWithDisposeInterface {
     if (code == 23 && stderr.contains('No such file')) return null;
     final line = stderr.trim().split('\n').where((l) => l.trim().isNotEmpty).lastOrNull;
     return line ?? 'rsync exited with $code';
+  }
+
+  /// The machine called [name] (a thread's `machine`), if it's configured.
+  MachineStatus? byName(String? name) => name == null ? null : status.where((m) => m.config.name == name).firstOrNull;
+
+  /// Whether process [pid] runs on [machine], checked over SSH. Free: no AI.
+  Future<bool> isProcessAlive(MachineConfig machine, int pid) async {
+    final check = ClaudePlatform.forOS(machine.os, env: const {}, fileExists: (_) => false).remoteProcessCheck(pid);
+    if (check == null) return false;
+    final cmd = _platform.sshCommand(machine.host, check);
+    try {
+      return (await _run(cmd.first, cmd.sublist(1))).exitCode == 0;
+    } on ProcessException {
+      return false;
+    }
   }
 
   @override
