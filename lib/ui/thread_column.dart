@@ -119,7 +119,7 @@ class _ThreadColumnState extends State<ThreadColumn> with SingleTickerProviderSt
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              t.project != null ? 'Project: ${t.project}' : 'Claude Code session',
+                              origin(t),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodySmall,
@@ -163,42 +163,51 @@ class _ThreadColumnState extends State<ThreadColumn> with SingleTickerProviderSt
                         ),
                 ),
                 const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: CallbackShortcuts(
-                    bindings: {
-                      SingleActivator(
-                        LogicalKeyboardKey.enter,
-                        meta: ClaudePlatform.current.usesCommandKey,
-                        control: !ClaudePlatform.current.usesCommandKey,
-                      ): _send,
-                    },
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _controller,
-                            minLines: 1,
-                            maxLines: 6,
-                            decoration: InputDecoration(
-                              hintText: 'Message this thread (${ClaudePlatform.current.sendShortcutLabel} to send)',
-                              isDense: true,
-                              border: OutlineInputBorder(),
+                if (t.machine != null)
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      "This thread runs on ${t.machine}. Replying to another computer isn't supported yet.",
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: CallbackShortcuts(
+                      bindings: {
+                        SingleActivator(
+                          LogicalKeyboardKey.enter,
+                          meta: ClaudePlatform.current.usesCommandKey,
+                          control: !ClaudePlatform.current.usesCommandKey,
+                        ): _send,
+                      },
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _controller,
+                              minLines: 1,
+                              maxLines: 6,
+                              decoration: InputDecoration(
+                                hintText: 'Message this thread (${ClaudePlatform.current.sendShortcutLabel} to send)',
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        IconButton.filled(
-                          tooltip: 'Send',
-                          onPressed: _send,
-                          // The theme's muted icon colour would win otherwise.
-                          icon: Icon(Icons.send, size: 18, color: theme.colorScheme.onPrimary),
-                        ),
-                      ],
+                          const SizedBox(width: 6),
+                          IconButton.filled(
+                            tooltip: 'Send',
+                            onPressed: _send,
+                            // The theme's muted icon colour would win otherwise.
+                            icon: Icon(Icons.send, size: 18, color: theme.colorScheme.onPrimary),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

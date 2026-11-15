@@ -77,6 +77,17 @@ class _ThreadListState extends State<ThreadList> {
             ],
           ),
         ),
+        for (final m in vm.machines)
+          if (m.error != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+              child: Text(
+                "Can't read ${m.config.name}: ${m.error}",
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+              ),
+            ),
         Expanded(
           child: rows.isEmpty
               ? const Center(child: Text('No threads to show'))
@@ -149,7 +160,7 @@ class _ThreadRow extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              thread.project != null ? 'Project: ${thread.project}' : 'Claude Code session',
+                              origin(thread),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
@@ -162,7 +173,11 @@ class _ThreadRow extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          '${last.fromHuman ? 'You' : last.isNotes ? 'Notes' : 'Claude'}: ${plainPreview(last.text)}',
+                          '${last.fromHuman
+                              ? 'You'
+                              : last.isNotes
+                              ? 'Notes'
+                              : 'Claude'}: ${plainPreview(last.text)}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall,

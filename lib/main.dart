@@ -8,6 +8,7 @@ import 'services/data_dir.dart';
 import 'services/claude_cli.dart';
 import 'services/link_service.dart';
 import 'services/local_threads_service.dart';
+import 'services/machines_service.dart';
 import 'services/outbox_service.dart';
 import 'services/send_service.dart';
 import 'services/seen_service.dart';
@@ -30,6 +31,7 @@ Injector buildRootInjector(DataDir dir, [ClaudePlatform? platform]) {
     Provider(ClaudeCli),
     Provider(LinkService),
     Provider(LocalThreadsService),
+    Provider(MachinesService),
     Provider(SendService),
     Provider(SeenService),
     Provider(SleepService),
@@ -50,8 +52,12 @@ Injector buildRootInjector(DataDir dir, [ClaudePlatform? platform]) {
       },
     ),
     InjectableFactory.withDependencies<LocalThreadsService>(
-      DependencyDataBuilder.list([DataDir, LinkService]),
-      (d) => LocalThreadsService(d.get<DataDir>(), d.get<LinkService>(), os),
+      DependencyDataBuilder.list([DataDir, LinkService, MachinesService]),
+      (d) => LocalThreadsService(d.get<DataDir>(), d.get<LinkService>(), os, d.get<MachinesService>()),
+    ),
+    InjectableFactory.withDependencies<MachinesService>(
+      DependencyDataBuilder.list([DataDir]),
+      (d) => MachinesService(d.get<DataDir>(), os),
     ),
     InjectableFactory.withDependencies<SendService>(
       DependencyDataBuilder.list([OutboxService, ClaudeCli]),

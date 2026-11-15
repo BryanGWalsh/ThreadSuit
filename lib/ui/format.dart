@@ -1,3 +1,4 @@
+import '../models/models.dart';
 import 'package:flutter/material.dart';
 
 String ago(DateTime t, {DateTime? now}) {
@@ -28,3 +29,10 @@ TextSpan lightMarkdown(String text, TextStyle? base) {
 
 String plainPreview(String text) =>
     text.replaceAllMapped(_mdLink, (m) => m.group(1)!).replaceAll('**', '').replaceAll('`', '').replaceAll('\n', ' ');
+
+/// Where a thread comes from: its project or a Code session, and the other
+/// computer it runs on, if it isn't this one.
+String origin(ThreadSummary t) {
+  final kind = t.project != null ? 'Project: ${t.project}' : 'Claude Code session';
+  return t.machine != null ? '$kind · on ${t.machine}' : kind;
+}

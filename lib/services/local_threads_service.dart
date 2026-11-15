@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:complete_dependency_injector/complete_dependency_injector.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';
 
@@ -11,6 +12,7 @@ import '../models/models.dart';
 import '../platform/claude_platform.dart';
 import 'data_dir.dart';
 import 'link_service.dart';
+import 'machines_service.dart';
 import 'transcript_parser.dart';
 
 class SnapshotState {
@@ -27,12 +29,15 @@ class SnapshotState {
 /// - [ClaudePlatform.transcriptsDir]: each session's transcript, in
 ///   `<folder>/<id>.jsonl`, or `ssh-<id>/<id>.jsonl` for SSH sessions.
 ///
-/// Only threads whose session ran on this computer appear. Transcripts are read
-/// incrementally and the parsed state is cached in `cache.json`.
+/// Only threads whose session ran on this computer appear, plus those of the
+/// other computers in `config.json`, whose files [MachinesService] copies
+/// here. Transcripts are read incrementally and the parsed state is cached in
+/// `cache.json`.
 class LocalThreadsService implements InjectableWithDisposeInterface {
   final DataDir _dir;
   final LinkService _links;
   final ClaudePlatform _platform;
+  final MachinesService? _machines;
   final _state = BehaviorSubject<SnapshotState>.seeded(const SnapshotState(null, null));
   Timer? _timer;
   bool _busy = false;
@@ -44,7 +49,7 @@ class LocalThreadsService implements InjectableWithDisposeInterface {
   static const notifyPort = 47321;
   HttpServer? _server;
 
-  LocalThreadsService(this._dir, this._links, [ClaudePlatform? platform])
+  LocalThreadsService(this._dir, this._links, [ClaudePlatform? platform, this._machines])
     : _platform = platform ?? ClaudePlatform.current {
     try {
       _cache = jsonDecode(File(_dir.cache).readAsStringSync()) as Map<String, dynamic>;
@@ -53,6 +58,8 @@ class LocalThreadsService implements InjectableWithDisposeInterface {
     // Hooks make updates instant; this poll is only a fallback for missed pings.
     _timer = Timer.periodic(const Duration(seconds: 15), (_) => _refresh());
     _links.changes.listen((_) => _rebuild());
+    // A finished copy of another computer's files may have news.
+    _machines?.statusStream.skip(1).listen((_) => _refresh());
     _listen();
   }
 
@@ -87,11 +94,23 @@ class LocalThreadsService implements InjectableWithDisposeInterface {
     try {
       final input = {
         'cache': _cache,
-        'sessions_dir': _platform.desktopSessionsDir,
-        'transcripts_dir': _platform.transcriptsDir,
-        'os': _platform.name,
+        'sources': [
+          {
+            'sessions_dir': _platform.desktopSessionsDir,
+            'transcripts_dir': _platform.transcriptsDir,
+            'os': _platform.name,
+          },
+          for (final m in _machines?.status ?? const <MachineStatus>[])
+            if (m.ready)
+              {
+                'sessions_dir': m.sessionsDir,
+                'transcripts_dir': m.transcriptsDir,
+                'os': m.config.os,
+                'machine': m.config.name,
+              },
+        ],
       };
-      final out = await Isolate.run(() => _scan(input));
+      final out = await Isolate.run(() => scanSources(input));
       _cache = out['cache'] as Map<String, dynamic>;
       _sessions = (out['sessions'] as List).cast<Map<String, dynamic>>();
       if (out['changed'] == true) {
@@ -201,6 +220,7 @@ class LocalThreadsService implements InjectableWithDisposeInterface {
           // projects.json wins, so you can rename a project; then the name
           // from the transcript; then the bare id.
           project: isProject ? (projects[projectId] ?? projectName ?? projectId) : null,
+          machine: parts.last.$1['machine'] as String?,
           links: _links.linksFor(threadId, digest),
         ),
       );
@@ -231,13 +251,26 @@ class LocalThreadsService implements InjectableWithDisposeInterface {
   }
 }
 
-/// Runs off the UI isolate: lists sessions and reads new transcript bytes.
-Map<String, dynamic> _scan(Map<String, dynamic> input) {
+/// Runs off the UI isolate: lists sessions and reads new transcript bytes,
+/// for this computer and for each copied one (`sources`; a source with a
+/// `machine` is another computer, and its sessions carry that name).
+@visibleForTesting
+Map<String, dynamic> scanSources(Map<String, dynamic> input) {
   final cache = Map<String, dynamic>.from(input['cache'] as Map);
   final sessions = <Map<String, dynamic>>[];
   var changed = false;
+  for (final source in (input['sources'] as List).cast<Map<String, dynamic>>()) {
+    changed |= _scan(source, cache, sessions);
+  }
+  return {'cache': cache, 'sessions': sessions, 'changed': changed};
+}
+
+/// Scans one computer's files into [cache] and [sessions]; returns whether
+/// the cache changed.
+bool _scan(Map<String, dynamic> input, Map<String, dynamic> cache, List<Map<String, dynamic>> sessions) {
+  var changed = false;
   final dir = Directory(input['sessions_dir'] as String);
-  if (!dir.existsSync()) return {'cache': cache, 'sessions': sessions, 'changed': false};
+  if (!dir.existsSync()) return false;
 
   for (final f in dir.listSync(recursive: true)) {
     if (f is! File || !f.path.endsWith('.json')) continue;
@@ -274,9 +307,10 @@ Map<String, dynamic> _scan(Map<String, dynamic> input) {
       'title_source': d['titleSource'],
       'transcript': transcript,
       'prs': d['prs'],
+      'machine': input['machine'],
     });
   }
-  return {'cache': cache, 'sessions': sessions, 'changed': changed};
+  return changed;
 }
 
 /// Where a desktop session record's transcript may be, most likely first.

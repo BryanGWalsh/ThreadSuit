@@ -83,6 +83,10 @@ class ThreadSummary {
   /// The claude.ai project the thread belongs to; null when it has none.
   final String? project;
 
+  /// The other computer the thread's session runs on (its name from
+  /// `config.json`); null for this computer.
+  final String? machine;
+
   /// The title from Claude's data when you've renamed the thread in Thread
   /// Suit ([title] is then your name for it); null otherwise.
   final String? originalTitle;
@@ -90,6 +94,7 @@ class ThreadSummary {
   const ThreadSummary({
     this.originalTitle,
     this.project,
+    this.machine,
     this.links = const [],
     this.messagesAsOf,
     required this.threadId,
@@ -105,6 +110,7 @@ class ThreadSummary {
   ThreadSummary renamed(String newTitle) => ThreadSummary(
     originalTitle: originalTitle ?? title,
     project: project,
+    machine: machine,
     links: links,
     messagesAsOf: messagesAsOf,
     threadId: threadId,
@@ -124,6 +130,7 @@ class ThreadSummary {
     lastActivityAt: DateTime.parse(j['last_activity_at'] as String),
     resolved: j['resolved'] == true,
     project: j['project'] as String?,
+    machine: j['machine'] as String?,
     links: ((j['links'] as List?) ?? const []).map(ThreadLink.fromJson).whereType<ThreadLink>().toList(),
     messagesAsOf: j['messages_as_of'] == null ? null : DateTime.parse(j['messages_as_of'] as String),
     messages:

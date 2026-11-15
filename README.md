@@ -34,6 +34,8 @@ finding links do use Claude, a little, through your own Claude Code login
 - **Links to what the thread is about:** its PRs and issues, from whatever
   git host or project manager your Claude can reach.
 - **Instant updates (optional):** see new messages the moment they arrive.
+- **Your other computers (optional):** see threads that ran on another
+  computer too, copied over your own SSH login.
 
 ## Requirements
 
@@ -101,6 +103,23 @@ The hook can't slow down or break Claude Code, even when Thread Suit isn't
 running. It only helps for Claude sessions on this computer (not SSH or cloud
 sessions), and sessions that were already open need a restart to pick it up.
 To remove it: `python3 tools/install_hook.py --uninstall`.
+
+## Threads from your other computers (optional)
+
+If some of your threads ran on another computer, Thread Suit can show them
+too. It copies that computer's Claude session files over SSH; it doesn't use
+your Claude login. Add the computer to `~/.thread-suit/config.json`:
+
+```json
+{"machines": [{"host": "laptop", "os": "macos", "name": "Laptop"}]}
+```
+
+`host` is whatever you'd type after `ssh`. It has to work without a password
+prompt (an SSH key or agent), and both computers need `rsync`. Windows isn't
+supported yet on either end. Their threads show "on Laptop" under the title.
+For now they're read-only: to reply, use that computer. The first copy
+brings over every transcript, so it can take a while; later copies take a
+second. Copies live in `~/.thread-suit/machines/`.
 
 ## How links work
 

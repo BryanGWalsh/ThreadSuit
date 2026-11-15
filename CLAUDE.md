@@ -21,7 +21,7 @@
   `TranscriptState.version` so cached transcripts are re-read.
 - **App state** lives in `~/.thread-suit/` (`seen.json`, `sleep.json`,
   `titles.json`, `ui.json`, `links.json`, `cache.json`, `projects.json`, `config.json`,
-  `outbox/`). Never write to Claude's own files.
+  `outbox/`, `machines/`). Never write to Claude's own files.
   `cache.json` can be deleted safely; it is rebuilt on the next scan.
 - **Minimal AI use:** no long-running sync session. Reading is free. Sending
   and link lookups (rate-limited, cached, read-only tools only) use one-off

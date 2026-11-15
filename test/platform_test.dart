@@ -36,6 +36,24 @@ void main() {
       expect(mac.isProcessAliveFromOutput(42, 0, ''), isTrue);
       expect(mac.isProcessAliveFromOutput(42, 1, ''), isFalse);
     });
+
+    test('another computer: desktop folder and rsync over ssh', () {
+      expect(mac.desktopDirFromHome, 'Library/Application Support/Claude');
+      expect(mac.mirrorCommand(host: 'box', remoteDir: '.claude/projects', localDir: '/m/projects'), [
+        'rsync',
+        '-az',
+        '--delete',
+        '--prune-empty-dirs',
+        '--include=*/',
+        '--include=*.json',
+        '--include=*.jsonl',
+        '--exclude=*',
+        '-e',
+        'ssh -o BatchMode=yes -o ConnectTimeout=10',
+        'box:.claude/projects/',
+        '/m/projects/',
+      ]);
+    });
   });
 
   group('Linux', () {
@@ -57,6 +75,15 @@ void main() {
       expect(linux.openUrlCommand('https://x.dev'), ['xdg-open', 'https://x.dev']);
       expect(linux.usesCommandKey, isFalse);
       expect(linux.sendShortcutLabel, 'Ctrl+Enter');
+    });
+
+    test('another computer: desktop folder and rsync over ssh', () {
+      final linux = fake('linux', {'HOME': '/home/ann', 'XDG_CONFIG_HOME': '/xdg'});
+      // The default place, not this computer's XDG_CONFIG_HOME.
+      expect(linux.desktopDirFromHome, '.config/Claude');
+      final cmd = linux.mirrorCommand(host: 'me@box', remoteDir: 'a b', localDir: '/m')!;
+      expect(cmd.first, 'rsync');
+      expect(cmd.sublist(cmd.length - 2), ['me@box:a b/', '/m/']);
     });
 
     test('other Unix-likes use the Linux layout', () {
@@ -92,6 +119,11 @@ void main() {
       expect(win.processCheckCommand(42), ['tasklist', '/FI', 'PID eq 42', '/NH', '/FO', 'CSV']);
       expect(win.isProcessAliveFromOutput(42, 0, '"claude.exe","42","Console","1","90,000 K"'), isTrue);
       expect(win.isProcessAliveFromOutput(42, 0, 'INFO: No tasks are running which match the criteria.'), isFalse);
+    });
+
+    test("another computer: desktop folder; no rsync, so it can't copy yet", () {
+      expect(win.desktopDirFromHome, 'AppData/Roaming/Claude');
+      expect(win.mirrorCommand(host: 'box', remoteDir: 'x', localDir: r'C:\m'), isNull);
     });
   });
 

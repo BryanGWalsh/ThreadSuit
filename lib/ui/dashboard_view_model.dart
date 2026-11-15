@@ -8,6 +8,7 @@ import '../services/sleep_service.dart';
 import '../services/theme_service.dart';
 import '../services/title_service.dart';
 import '../services/local_threads_service.dart';
+import '../services/machines_service.dart';
 import '../services/send_service.dart';
 import '../services/workspace_service.dart';
 
@@ -20,6 +21,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
   late final ThemeService themes;
   late final OutboxService outbox;
   late final WorkspaceService workspace;
+  late final MachinesService machinesService;
 
   Snapshot? snapshot;
   String? snapshotError;
@@ -29,6 +31,9 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
   List<OutboxMessage> pending = const [];
   Map<String, String> sendStatus = const {};
   List<ThreadSummary> _threads = const [];
+
+  /// Your other computers and how their last copy went.
+  List<MachineStatus> machines = const [];
 
   DashboardViewModel()
     : super(
@@ -41,6 +46,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
           SendService,
           TitleService,
           ThemeService,
+          MachinesService,
         ]),
       );
 
@@ -54,6 +60,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
     workspace = d.get<WorkspaceService>();
     titleService = d.get<TitleService>();
     themes = d.get<ThemeService>();
+    machinesService = d.get<MachinesService>();
   }
 
   @override
@@ -65,6 +72,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
     sleepService.sleepStream,
     sender.statusStream,
     titleService.titlesStream,
+    machinesService.statusStream,
   ];
 
   @override
@@ -79,6 +87,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
     sendStatus = s[5] as Map<String, String>;
     // Your names for threads win over every title Claude's data gives.
     _threads = TitleService.apply(snapshot?.threads ?? const [], s[6] as Map<String, String>);
+    machines = s[7] as List<MachineStatus>;
   }
 
   List<ThreadSummary> get threads => _threads;
@@ -120,6 +129,8 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
   void rename(ThreadSummary t, String title) => titleService.rename(t.threadId, title);
 
   void send(ThreadSummary t, String text) {
+    // Messages can only be delivered to sessions on this computer.
+    if (t.machine != null) return;
     outbox.queue(t.threadId, t.sessionId ?? '', text);
     seenService.markSeen(t);
     sleepService.wake(t);

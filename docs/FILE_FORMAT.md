@@ -137,9 +137,41 @@ moved here. If it can't be moved, it's copied and the old folder is left.
 | `ui.json` | `{"theme": "light"}` or `"dark"`, from the title bar switch; no key means follow the system |
 | `titles.json` | Your own names for threads (thread id to name), set with the pencil next to a title |
 | `links.json` | Per thread: the digest hash, the links Haiku found (or `failed`), when, and what it cost |
-| `config.json` | Optional: `{"resolve_links": false}` turns Haiku link lookups off |
+| `config.json` | Optional: `{"resolve_links": false}` turns Haiku link lookups off; `machines` lists other computers to read (see [Other computers](#other-computers)) |
 | `projects.json` | Project id to name (transcripts only carry the id) |
 | `outbox/<id>.json` | A message waiting to be delivered |
+| `machines/<host>/sessions`, `machines/<host>/projects` | Copies of another computer's session records and transcripts. Safe to delete; they're copied again |
+
+## Other computers
+
+Threads whose sessions ran on another computer aren't on this one, and
+claude.ai has no public way to list them. So Thread Suit copies that
+computer's files here over your own SSH login. It uses no Claude login and
+no AI. `config.json`:
+
+```json
+{"machines": [{"host": "laptop", "os": "macos", "name": "Laptop"}]}
+```
+
+`host` is what you'd pass to `ssh`. `os` is the other computer's OS
+(`macos`, `linux`; default `linux`). `name` labels its threads (default the
+host). Every 60 seconds `MachinesService` runs `rsync -az --delete` over
+`ssh -o BatchMode=yes` for two folders, each relative to the remote home:
+the desktop app's `claude-code-sessions` (at the OS's default place,
+`ClaudePlatform.desktopDirFromHome`) and `.claude/projects`. Only `.json` and
+`.jsonl` files are copied. `LocalThreadsService` scans each copy like this
+computer's files (`scanSources`), using the remote OS's folder naming, and
+tags its threads with `machine`. A project thread whose sessions ran on both
+computers is one row. The first copy brings over every transcript; later
+copies bring only what changed.
+
+Limits for now:
+- Read-only. Tiles of another computer's threads have no reply box.
+- Needs `rsync` and key-based SSH (no password prompt) to the other computer.
+  Neither end can be Windows yet.
+- `CLAUDE_CONFIG_DIR` or `XDG_CONFIG_HOME` on the other computer isn't known,
+  so only the default folders are read.
+- A failed copy is shown at the top of the list. The last good copy stays.
 
 ## AI use
 
@@ -202,6 +234,8 @@ implementation provides:
 | Open a URL | `open` | `xdg-open` | `rundll32 url.dll,FileProtocolHandler` |
 | Is a process running | `kill -0` | `kill -0` | `tasklist /FI "PID eq N"` |
 | Send shortcut | ⌘↩ | Ctrl+Enter | Ctrl+Enter |
+| Desktop data on another computer (`desktopDirFromHome`) | `Library/Application Support/Claude` | `.config/Claude` | `AppData/Roaming/Claude` |
+| Copy another computer's files (`mirrorCommand`) | `rsync` over `ssh` | same | not yet (no rsync) |
 
 `ClaudePlatform.forOS(os, env: ..., fileExists: ...)` builds any of them with a
 fake environment, so `test/platform_test.dart` checks all three on any
