@@ -137,41 +137,55 @@ moved here. If it can't be moved, it's copied and the old folder is left.
 | `ui.json` | `{"theme": "light"}` or `"dark"`, from the title bar switch; no key means follow the system |
 | `titles.json` | Your own names for threads (thread id to name), set with the pencil next to a title |
 | `links.json` | Per thread: the digest hash, the links Haiku found (or `failed`), when, and what it cost |
-| `config.json` | Optional: `{"resolve_links": false}` turns Haiku link lookups off; `machines` lists other computers to read (see [Other computers](#other-computers)) |
+| `config.json` | Optional: `{"resolve_links": false}` turns Haiku link lookups off; `share` and `peers` connect copies on your other computers (see [Other computers](#other-computers)) |
 | `projects.json` | Project id to name (transcripts only carry the id) |
 | `outbox/<id>.json` | A message waiting to be delivered |
-| `machines/<host>/sessions`, `machines/<host>/projects` | Copies of another computer's session records and transcripts. Safe to delete; they're copied again |
 
 ## Other computers
 
 Threads whose sessions ran on another computer aren't on this one, and
-claude.ai has no public way to list them. So Thread Suit copies that
-computer's files here over your own SSH login. It uses no Claude login and
-no AI. `config.json`:
+claude.ai has no public way to list them. So each computer runs its own copy
+of Thread Suit, and the copies talk to each other (`PeerService`). No AI, no
+Claude login.
+
+On the computer whose threads you want to see, turn sharing on in
+`config.json`:
 
 ```json
-{"machines": [{"host": "laptop", "os": "macos", "name": "Laptop"}]}
+{"share": {"port": 47322, "address": "100.64.0.5"}}
 ```
 
-`host` is what you'd pass to `ssh`. `os` is the other computer's OS
-(`macos`, `linux`; default `linux`). `name` labels its threads (default the
-host). Every 60 seconds `MachinesService` runs `rsync -az --delete` over
-`ssh -o BatchMode=yes` for two folders, each relative to the remote home:
-the desktop app's `claude-code-sessions` (at the OS's default place,
-`ClaudePlatform.desktopDirFromHome`) and `.claude/projects`. Only `.json` and
-`.jsonl` files are copied. `LocalThreadsService` scans each copy like this
-computer's files (`scanSources`), using the remote OS's folder naming, and
-tags its threads with `machine`. A project thread whose sessions ran on both
-computers is one row. The first copy brings over every transcript; later
-copies bring only what changed.
+`port` defaults to 47322. `address` is the address to listen on, and defaults
+to every address the computer has. On first start a random `token` (64 hex
+characters) is added to the entry and saved. Tokens shorter than 32
+characters are replaced.
 
-Limits for now:
-- Read-only. Tiles of another computer's threads have no reply box.
-- Needs `rsync` and key-based SSH (no password prompt) to the other computer.
-  Neither end can be Windows yet.
-- `CLAUDE_CONFIG_DIR` or `XDG_CONFIG_HOME` on the other computer isn't known,
-  so only the default folders are read.
-- A failed copy is shown at the top of the list. The last good copy stays.
+On the computer that reads them, list the peer with that token:
+
+```json
+{"peers": [{"name": "Desktop", "url": "http://100.64.0.5:47322", "token": "..."}]}
+```
+
+Both can be in one file, so two computers can read each other.
+
+The API is HTTP with JSON, and every request needs
+`Authorization: Bearer <token>` (compared in constant time; 401 otherwise):
+
+| Request | Answer |
+|---|---|
+| `GET /v1/threads` | `{"threads": [...]}`: this computer's own threads (never ones read from its peers), in the `ThreadSummary.toJson` shape: `thread_id`, `session_id`, `title`, `last_activity_at`, `resolved`, `project`, `links`, `messages_as_of`, `messages` (each `id`, `author`, `from_human`, `sent_at`, `text`, `kind`) |
+| `POST /v1/send` with `{"thread_id", "text"}` | `202 {"queued": id}`: the text is queued in this computer's `outbox/` for that thread's own session (the sender can't choose a session) and delivered as usual. 404 for an unknown thread, 413 over 64 KB |
+
+The reader polls each peer every 5 seconds. A peer's threads get the id
+`<name>:<thread id>` and `machine: <name>`, so seen, sleep and title state
+are kept apart from local threads. A reply to one is queued in the reader's
+outbox with `machine` set, and `SendService` hands it to the peer instead of
+calling Claude. An unreachable peer is tried again on every pass. A refusal
+(4xx) is final until restart. Errors show at the top of the list.
+
+The traffic is plain HTTP. Anyone on the network path can read it, including
+the token, so use a private network you trust or a VPN such as Tailscale
+(whose own traffic is encrypted). Never expose the port to the internet.
 
 ## AI use
 
@@ -234,8 +248,6 @@ implementation provides:
 | Open a URL | `open` | `xdg-open` | `rundll32 url.dll,FileProtocolHandler` |
 | Is a process running | `kill -0` | `kill -0` | `tasklist /FI "PID eq N"` |
 | Send shortcut | ⌘↩ | Ctrl+Enter | Ctrl+Enter |
-| Desktop data on another computer (`desktopDirFromHome`) | `Library/Application Support/Claude` | `.config/Claude` | `AppData/Roaming/Claude` |
-| Copy another computer's files (`mirrorCommand`) | `rsync` over `ssh` | same | not yet (no rsync) |
 
 `ClaudePlatform.forOS(os, env: ..., fileExists: ...)` builds any of them with a
 fake environment, so `test/platform_test.dart` checks all three on any

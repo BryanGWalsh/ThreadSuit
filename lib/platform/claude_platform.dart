@@ -45,18 +45,6 @@ abstract class ClaudePlatform {
   /// Where the Claude desktop app keeps its data.
   String get claudeDesktopDir;
 
-  /// [claudeDesktopDir] at its default place, relative to the home folder
-  /// and written with `/`. Used to find the folder on another computer of
-  /// this OS over SSH, where the environment isn't known.
-  String get desktopDirFromHome;
-
-  /// The command that copies a folder from another computer into
-  /// [localDir], over the user's own SSH login to [host] (a name from their
-  /// SSH config, or `user@host`). [remoteDir] is relative to the remote home
-  /// folder. Only session records and transcripts (`.json`, `.jsonl`) are
-  /// copied, and only what changed. Null where Thread Suit can't do that yet.
-  List<String>? mirrorCommand({required String host, required String remoteDir, required String localDir});
-
   /// The desktop app's records of Code sessions (title, folder, transcript id).
   String get desktopSessionsDir => paths.join(claudeDesktopDir, 'claude-code-sessions');
 
@@ -171,24 +159,6 @@ abstract class _UnixPlatform extends ClaudePlatform {
 
   @override
   List<String> processCheckCommand(int pid) => ['/bin/kill', '-0', '$pid'];
-
-  /// rsync over ssh. BatchMode makes ssh fail instead of asking for a
-  /// password, since nobody can type one; keys or an agent are needed.
-  @override
-  List<String>? mirrorCommand({required String host, required String remoteDir, required String localDir}) => [
-    'rsync',
-    '-az',
-    '--delete',
-    '--prune-empty-dirs',
-    '--include=*/',
-    '--include=*.json',
-    '--include=*.jsonl',
-    '--exclude=*',
-    '-e',
-    'ssh -o BatchMode=yes -o ConnectTimeout=10',
-    '$host:$remoteDir/',
-    '$localDir/',
-  ];
 }
 
 class MacOSPlatform extends _UnixPlatform {
@@ -198,10 +168,7 @@ class MacOSPlatform extends _UnixPlatform {
   String get name => 'macos';
 
   @override
-  String get claudeDesktopDir => paths.join(home, desktopDirFromHome);
-
-  @override
-  String get desktopDirFromHome => 'Library/Application Support/Claude';
+  String get claudeDesktopDir => paths.join(home, 'Library/Application Support/Claude');
 
   @override
   bool get usesCommandKey => true;
@@ -225,9 +192,6 @@ class LinuxPlatform extends _UnixPlatform {
     final xdg = env['XDG_CONFIG_HOME'];
     return paths.join(xdg != null && xdg.isNotEmpty ? xdg : paths.join(home, '.config'), 'Claude');
   }
-
-  @override
-  String get desktopDirFromHome => '.config/Claude';
 
   @override
   List<String> get extraToolDirs => [
@@ -256,13 +220,6 @@ class WindowsPlatform extends ClaudePlatform {
   /// `%APPDATA%\Claude`, normally `C:\Users\<you>\AppData\Roaming\Claude`.
   @override
   String get claudeDesktopDir => paths.join(env['APPDATA'] ?? paths.join(home, 'AppData', 'Roaming'), 'Claude');
-
-  @override
-  String get desktopDirFromHome => 'AppData/Roaming/Claude';
-
-  /// Windows has no rsync, so reading another computer isn't supported here yet.
-  @override
-  List<String>? mirrorCommand({required String host, required String remoteDir, required String localDir}) => null;
 
   @override
   String get defaultPath => r'C:\Windows\System32;C:\Windows';

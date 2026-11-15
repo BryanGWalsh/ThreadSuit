@@ -10,10 +10,13 @@ import '../models/models.dart';
 import '../platform/claude_platform.dart';
 import 'claude_cli.dart';
 import 'outbox_service.dart';
+import 'peer_service.dart';
 
 /// Delivers queued messages to their thread's running Claude session on this
 /// computer, one short Haiku `claude -p` call per message. A message for a thread
-/// whose session isn't running waits until it is.
+/// whose session isn't running waits until it is. A message for a thread on
+/// another computer goes to that computer's copy of Thread Suit instead
+/// ([PeerService]), which delivers it there; that takes no Claude call here.
 class SendService implements InjectableWithDisposeInterface {
   final OutboxService _outbox;
   final ClaudeCli _cli;
@@ -30,7 +33,9 @@ class SendService implements InjectableWithDisposeInterface {
 
   final DateTime Function() _now;
 
-  SendService(this._outbox, this._cli, [ClaudePlatform? platform, DateTime Function()? now])
+  final PeerService? _peers;
+
+  SendService(this._outbox, this._cli, [ClaudePlatform? platform, DateTime Function()? now, this._peers])
     : _platform = platform ?? ClaudePlatform.current,
       _now = now ?? DateTime.now {
     _sub = _outbox.pendingStream.listen((p) {
@@ -72,6 +77,10 @@ class SendService implements InjectableWithDisposeInterface {
     _sending = true;
     try {
       for (final m in List.of(_pending)) {
+        if (m.machine != null) {
+          await _handOff(m);
+          continue;
+        }
         final failed = _failures[m.id];
         if (failed != null) {
           final (tries, at) = failed;
@@ -105,6 +114,26 @@ class SendService implements InjectableWithDisposeInterface {
       _sending = false;
     }
   }
+
+  /// Gives [m] to its computer's copy of Thread Suit. An unreachable peer is
+  /// tried again on every pass (it costs nothing); a refusal is final.
+  Future<void> _handOff(OutboxMessage m) async {
+    if (_refused.contains(m.id)) return;
+    if (_peers == null) return _set(m.id, 'Not sent: ${m.machine} is not set up');
+    _set(m.id, 'Sending to ${m.machine}…');
+    try {
+      await _peers.send(m);
+      _outbox.remove(m);
+      _set(m.id, null);
+    } on PeerRefused catch (e) {
+      _refused.add(m.id);
+      _set(m.id, 'Not sent: ${m.machine} said "$e"');
+    } catch (e) {
+      _set(m.id, 'Waiting for ${m.machine} to be reachable');
+    }
+  }
+
+  final _refused = <String>{};
 
   void _set(String id, String? status) {
     final next = {..._status.value};

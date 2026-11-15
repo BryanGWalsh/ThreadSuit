@@ -77,17 +77,20 @@ class _ThreadListState extends State<ThreadList> {
             ],
           ),
         ),
-        for (final m in vm.machines)
-          if (m.error != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-              child: Text(
-                "Can't read ${m.config.name}: ${m.error}",
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
-              ),
+        for (final problem in [
+          if (vm.peerService.shareError != null) vm.peerService.shareError!,
+          for (final p in vm.peers)
+            if (p.error != null) "Can't reach ${p.config.name}: ${p.error}",
+        ])
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            child: Text(
+              problem,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
             ),
+          ),
         Expanded(
           child: rows.isEmpty
               ? const Center(child: Text('No threads to show'))

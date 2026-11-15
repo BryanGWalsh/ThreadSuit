@@ -61,6 +61,15 @@ class ThreadMessage {
     isEvent: j['kind'] == 'event',
     isNotes: j['kind'] == 'notes',
   );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'author': author,
+    'from_human': fromHuman,
+    'sent_at': sentAt.toUtc().toIso8601String(),
+    'text': text,
+    if (isEvent) 'kind': 'event' else if (isNotes) 'kind': 'notes',
+  };
 }
 
 /// A PR, issue or other item a thread is about (see [ResolvedLink]).
@@ -83,8 +92,9 @@ class ThreadSummary {
   /// The claude.ai project the thread belongs to; null when it has none.
   final String? project;
 
-  /// The other computer the thread's session runs on (its name from
-  /// `config.json`); null for this computer.
+  /// The other computer this thread is on (its name in `peers` in
+  /// `config.json`), read from the copy of Thread Suit running there; null
+  /// for this computer. Its [threadId] is then `<machine>:<id there>`.
   final String? machine;
 
   /// The title from Claude's data when you've renamed the thread in Thread
@@ -138,6 +148,35 @@ class ThreadSummary {
           ..sort((a, b) => a.sentAt.compareTo(b.sentAt)),
   );
 
+  /// What another copy of Thread Suit reads (see [ThreadSummary.fromJson]).
+  Map<String, dynamic> toJson() => {
+    'thread_id': threadId,
+    'session_id': sessionId,
+    'title': originalTitle ?? title,
+    'last_activity_at': lastActivityAt.toUtc().toIso8601String(),
+    'resolved': resolved,
+    'project': ?project,
+    'links': [for (final l in links) l.toJson()],
+    if (messagesAsOf != null) 'messages_as_of': messagesAsOf!.toUtc().toIso8601String(),
+    'messages': [for (final m in messages) m.toJson()],
+  };
+
+  /// This thread as read from the computer called [name]: tagged with it,
+  /// and with an id that can't clash with this computer's threads.
+  ThreadSummary onMachine(String name) => ThreadSummary(
+    machine: name,
+    project: project,
+    links: links,
+    messagesAsOf: messagesAsOf,
+    threadId: '$name:$threadId',
+    sessionId: sessionId,
+    title: title,
+    state: state,
+    lastActivityAt: lastActivityAt,
+    resolved: resolved,
+    messages: messages,
+  );
+
   /// When the newest real message (not a status notice) arrived. If the
   /// stored messages are older than the thread's activity, assume the newer
   /// activity may be a message.
@@ -173,7 +212,12 @@ class OutboxMessage {
   final String text;
   final DateTime queuedAt;
 
+  /// The other computer the thread is on ([ThreadSummary.machine]); its copy
+  /// of Thread Suit delivers the message. Null for this computer.
+  final String? machine;
+
   const OutboxMessage({
+    this.machine,
     required this.id,
     required this.threadId,
     required this.sessionId,
@@ -187,6 +231,7 @@ class OutboxMessage {
     'session_id': sessionId,
     'text': text,
     'queued_at': queuedAt.toUtc().toIso8601String(),
+    'machine': ?machine,
   };
 
   factory OutboxMessage.fromJson(Map<String, dynamic> j) => OutboxMessage(
@@ -195,5 +240,6 @@ class OutboxMessage {
     sessionId: (j['session_id'] as String?) ?? '',
     text: j['text'] as String,
     queuedAt: DateTime.parse(j['queued_at'] as String),
+    machine: j['machine'] as String?,
   );
 }

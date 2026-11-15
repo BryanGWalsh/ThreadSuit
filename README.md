@@ -34,8 +34,8 @@ finding links do use Claude, a little, through your own Claude Code login
 - **Links to what the thread is about:** its PRs and issues, from whatever
   git host or project manager your Claude can reach.
 - **Instant updates (optional):** see new messages the moment they arrive.
-- **Your other computers (optional):** see threads that ran on another
-  computer too, copied over your own SSH login.
+- **All your computers (optional):** see and reply to threads from Thread
+  Suit on your other computers.
 
 ## Requirements
 
@@ -104,22 +104,33 @@ running. It only helps for Claude sessions on this computer (not SSH or cloud
 sessions), and sessions that were already open need a restart to pick it up.
 To remove it: `python3 tools/install_hook.py --uninstall`.
 
-## Threads from your other computers (optional)
+## Threads on your other computers (optional)
 
-If some of your threads ran on another computer, Thread Suit can show them
-too. It copies that computer's Claude session files over SSH; it doesn't use
-your Claude login. Add the computer to `~/.thread-suit/config.json`:
+If some of your threads run on another computer, run Thread Suit there too
+and connect the two. Each copy shows the other's threads, labelled "on
+Desktop", and you can reply to them. The other computer delivers the reply
+to its own session, the same way it would if you'd typed it there.
 
-```json
-{"machines": [{"host": "laptop", "os": "macos", "name": "Laptop"}]}
-```
+1. On the computer to share from, add this to `~/.thread-suit/config.json`
+   and start Thread Suit:
 
-`host` is whatever you'd type after `ssh`. It has to work without a password
-prompt (an SSH key or agent), and both computers need `rsync`. Windows isn't
-supported yet on either end. Their threads show "on Laptop" under the title.
-For now they're read-only: to reply, use that computer. The first copy
-brings over every transcript, so it can take a while; later copies take a
-second. Copies live in `~/.thread-suit/machines/`.
+   ```json
+   {"share": {}}
+   ```
+
+   Thread Suit adds a random `token` to that entry. Copy it.
+2. On the computer you read from, add the first computer with that token:
+
+   ```json
+   {"peers": [{"name": "Desktop", "url": "http://desktop-address:47322", "token": "the token"}]}
+   ```
+
+Anyone with the token can read those threads and send messages into them,
+so keep it private. The connection isn't encrypted, so only use it on a
+network you trust, or over a VPN such as [Tailscale](https://tailscale.com),
+which also lets the computers reach each other away from home. Never open
+the port to the internet. Details are in
+[docs/FILE_FORMAT.md](docs/FILE_FORMAT.md#other-computers).
 
 ## How links work
 
@@ -143,6 +154,9 @@ To turn them off, put `{"resolve_links": false}` in
 
 Everything the Claude desktop app and Claude Code keep on your computer:
 project threads, Code sessions and SSH sessions started from the desktop app.
+
+Threads on your other computers appear if those computers run Thread Suit
+too (see [Threads on your other computers](#threads-on-your-other-computers-optional)).
 
 **Threads that only ran in the cloud don't appear.** If a thread never ran
 on this computer, for example a session in Claude Code on the web, its
@@ -181,7 +195,7 @@ calls.
 
 ## Privacy
 
-Thread Suit runs entirely on your computer: no server, no account, no
+Thread Suit runs entirely on your computers: no cloud service, no account, no
 analytics. It reads Claude's local files and writes only to its own folder,
 `~/.thread-suit/`. The only things that leave your machine:
 
@@ -190,6 +204,8 @@ analytics. It reads Claude's local files and writes only to its own folder,
 - **Finding links:** a short summary of a thread's URLs and tool calls (never
   the whole conversation), sent the same way. You can turn it off.
 - **Opening a link:** your browser opens it, as usual.
+- **Sharing with your other computers (only if you turn it on):** the
+  thread list, and replies to it, go between your own copies of Thread Suit.
 
 ## Disclaimer
 

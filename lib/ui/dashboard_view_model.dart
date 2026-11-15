@@ -3,12 +3,12 @@ import 'package:complete_dependency_injector_flutter/complete_dependency_injecto
 
 import '../models/models.dart';
 import '../services/outbox_service.dart';
+import '../services/peer_service.dart';
 import '../services/seen_service.dart';
 import '../services/sleep_service.dart';
 import '../services/theme_service.dart';
 import '../services/title_service.dart';
 import '../services/local_threads_service.dart';
-import '../services/machines_service.dart';
 import '../services/send_service.dart';
 import '../services/workspace_service.dart';
 
@@ -21,7 +21,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
   late final ThemeService themes;
   late final OutboxService outbox;
   late final WorkspaceService workspace;
-  late final MachinesService machinesService;
+  late final PeerService peerService;
 
   Snapshot? snapshot;
   String? snapshotError;
@@ -32,8 +32,8 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
   Map<String, String> sendStatus = const {};
   List<ThreadSummary> _threads = const [];
 
-  /// Your other computers and how their last copy went.
-  List<MachineStatus> machines = const [];
+  /// Your other computers' copies of Thread Suit, and what they last said.
+  List<PeerStatus> peers = const [];
 
   DashboardViewModel()
     : super(
@@ -46,7 +46,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
           SendService,
           TitleService,
           ThemeService,
-          MachinesService,
+          PeerService,
         ]),
       );
 
@@ -60,7 +60,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
     workspace = d.get<WorkspaceService>();
     titleService = d.get<TitleService>();
     themes = d.get<ThemeService>();
-    machinesService = d.get<MachinesService>();
+    peerService = d.get<PeerService>();
   }
 
   @override
@@ -72,7 +72,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
     sleepService.sleepStream,
     sender.statusStream,
     titleService.titlesStream,
-    machinesService.statusStream,
+    peerService.statusStream,
   ];
 
   @override
@@ -85,9 +85,13 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
     pending = s[3] as List<OutboxMessage>;
     slept = s[4] as Map<String, DateTime>;
     sendStatus = s[5] as Map<String, String>;
-    // Your names for threads win over every title Claude's data gives.
-    _threads = TitleService.apply(snapshot?.threads ?? const [], s[6] as Map<String, String>);
-    machines = s[7] as List<MachineStatus>;
+    peers = s[7] as List<PeerStatus>;
+    // This computer's threads, then each peer's. Your names for threads win
+    // over every title Claude's data gives.
+    _threads = TitleService.apply([
+      ...?snapshot?.threads,
+      for (final p in peers) ...p.threads,
+    ], s[6] as Map<String, String>);
   }
 
   List<ThreadSummary> get threads => _threads;
@@ -129,9 +133,7 @@ class DashboardViewModel extends DependencyBuilderViewModelBase {
   void rename(ThreadSummary t, String title) => titleService.rename(t.threadId, title);
 
   void send(ThreadSummary t, String text) {
-    // Messages can only be delivered to sessions on this computer.
-    if (t.machine != null) return;
-    outbox.queue(t.threadId, t.sessionId ?? '', text);
+    outbox.queue(t.threadId, t.sessionId ?? '', text, machine: t.machine);
     seenService.markSeen(t);
     sleepService.wake(t);
   }

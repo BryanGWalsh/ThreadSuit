@@ -56,7 +56,4 @@ class DataDir {
   String get titles => p.join(path, 'titles.json');
   String get ui => p.join(path, 'ui.json');
   String get outbox => p.join(path, 'outbox');
-
-  /// Copies of other computers' Claude files (see `MachinesService`).
-  String get machines => p.join(path, 'machines');
 }
